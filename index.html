@@ -1,0 +1,3343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SplitMate — Group Expense Tracker v2.1</title>
+<link rel="icon" type="image/png" href="images/splitmate-logo.png" />
+<link rel="apple-touch-icon" href="images/splitmate-logo.png" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700;800&family=Inter:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131a;
+    --surface2: #1c1c28;
+    --border: #2a2a3a;
+    --accent: #7c6dfa;
+    --accent2: #fa6d8a;
+    --accent3: #6dfabc;
+    --text: #f0f0f8;
+    --muted: #7070a0;
+    --warning: #fabc6d;
+    --font-head: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --radius: 16px;
+    --radius-sm: 8px;
+  }
+  [data-theme="light"] {
+    --bg: #f4f4f8;
+    --surface: #ffffff;
+    --surface2: #f0f0f6;
+    --border: #dcdce8;
+    --text: #1a1a2e;
+    --muted: #5050a0;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: background 0.2s, color 0.2s;
+  }
+
+  /* ── NOISE OVERLAY ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 9999; opacity: 0.4;
+  }
+
+  /* ── GLOW BLOBS ── */
+  .blob { position: fixed; border-radius: 50%; filter: blur(120px); pointer-events: none; z-index: 0; }
+  .blob-1 { width: 600px; height: 600px; background: rgba(124,109,250,0.12); top: -200px; left: -200px; }
+  .blob-2 { width: 500px; height: 500px; background: rgba(250,109,138,0.08); bottom: -150px; right: -150px; }
+  .blob-3 { width: 400px; height: 400px; background: rgba(109,250,188,0.06); top: 40%; left: 40%; }
+
+  /* ── LAYOUT ── */
+  #app { position: relative; z-index: 1; }
+
+  /* ── LOGIN SCREEN ── */
+  #login-screen {
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; padding: 20px;
+    animation: fadeUp 0.6s ease both;
+    background: url('images/login-bg.png') center/cover no-repeat;
+    position: relative;
+  }
+  #login-screen::before {
+    content: ''; position: absolute; inset: 0;
+    background: rgba(0,0,0,0.3);
+    pointer-events: none;
+  }
+  .login-logo { display: none; }
+  .login-card {
+    position: relative; z-index: 1;
+    background: transparent;
+    border: 1.5px solid rgba(255,255,255,0.3);
+    border-radius: 28px;
+    padding: 36px 44px 48px;
+    max-width: 420px; width: 100%; box-sizing: border-box;
+    text-align: center;
+    box-shadow: 0 8px 48px rgba(0,0,0,0.45);
+  }
+  /* backdrop-filter on pseudo-element so children (transparent PNG logo)
+     are NOT inside the blur stacking context — eliminates the white-box artifact */
+  .login-card::before {
+    content: ''; position: absolute; inset: 0;
+    border-radius: 28px;
+    background: rgba(15, 12, 35, 0.55);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    z-index: -1;
+  }
+  .logo { margin-bottom: 20px; overflow: hidden; }
+  .logo img {
+    width: 346px; max-width: 100%; height: auto; display: block; margin: 0 auto;
+    filter: drop-shadow(0 3px 14px rgba(0,0,0,0.5));
+  }
+  .login-sub { color: rgba(255,255,255,0.88); margin-bottom: 36px; font-size: 14px; line-height: 1.6; }
+  .google-btn {
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    width: 100%; padding: 14px 24px;
+    background: white; color: #333; border: none; border-radius: 12px;
+    font-family: var(--font-body); font-size: 15px; font-weight: 500;
+    cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.3);
+  }
+  .google-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+  .google-btn svg { width: 20px; height: 20px; }
+
+  /* ── REQUEST ACCESS ── */
+  .request-access-link { margin-top: 18px; text-align: center; font-size: 13px; color: rgba(255,255,255,0.55); }
+  .request-access-link button { background: none; border: none; color: rgba(255,255,255,0.75); font-size: 13px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; font-family: var(--font-body); transition: color 0.15s; }
+  .request-access-link button:hover { color: white; }
+  .request-access-form { margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.15); padding-top: 20px; display: none; }
+  .request-access-form.open { display: block; }
+  .request-access-form label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.8px; display: block; margin-bottom: 8px; }
+  .request-access-form input[type=email] { width: 100%; padding: 11px 14px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.2); background: rgba(255,255,255,0.08); color: white; font-size: 14px; font-family: var(--font-body); outline: none; box-sizing: border-box; transition: border-color 0.15s; }
+  .request-access-form input[type=email]::placeholder { color: rgba(255,255,255,0.35); }
+  .request-access-form input[type=email]:focus { border-color: rgba(255,255,255,0.5); }
+  .request-access-form .req-btn { margin-top: 10px; width: 100%; padding: 11px; border-radius: 10px; border: none; background: var(--accent); color: white; font-size: 14px; font-weight: 500; font-family: var(--font-body); cursor: pointer; transition: background 0.15s, transform 0.15s; }
+  .request-access-form .req-btn:hover { background: #9080ff; transform: translateY(-1px); }
+  .request-access-form .req-btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+  .req-status { margin-top: 12px; font-size: 13px; line-height: 1.5; padding: 10px 14px; border-radius: 10px; display: none; }
+  .req-status.success { display: block; background: rgba(109,250,188,0.12); border: 1px solid rgba(109,250,188,0.3); color: #6dfabc; }
+  .req-status.error   { display: block; background: rgba(250,109,138,0.12); border: 1px solid rgba(250,109,138,0.3); color: #fa6d8a; }
+  .req-status.info    { display: block; background: rgba(124,109,250,0.12); border: 1px solid rgba(124,109,250,0.3); color: #a59bff; }
+
+  .setup-note {
+    margin-top: 32px; padding: 16px; background: rgba(124,109,250,0.1);
+    border: 1px solid rgba(124,109,250,0.2); border-radius: 12px;
+    font-size: 13px; color: var(--muted); line-height: 1.6; text-align: left;
+  }
+  .setup-note strong { color: var(--accent); }
+
+  /* ── SETUP MODAL ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; padding: 24px; backdrop-filter: blur(8px);
+    animation: fadeIn 0.2s ease both;
+  }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 24px; padding: 40px; max-width: 560px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+    animation: slideUp 0.3s ease both;
+  }
+  .modal h2 { font-family: var(--font-head); font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .modal p { color: var(--muted); font-size: 13px; margin-bottom: 24px; line-height: 1.6; }
+
+  /* ── MAIN LAYOUT ── */
+  #main-app { display: none; min-height: 100vh; }
+  #main-app.active { display: flex; }
+
+  .sidebar {
+    width: 240px; min-height: 100vh;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 24px 16px;
+    position: sticky; top: 0;
+    animation: slideRight 0.4s ease both;
+  }
+  .sidebar-logo { padding: 8px 12px 24px; }
+  .sidebar-logo img { height: 50px; width: auto; display: block; }
+
+  .nav-section { margin-bottom: 8px; }
+  .nav-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); padding: 0 12px; margin-bottom: 4px; }
+  .nav-btn {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 10px 12px; border: none; border-radius: 10px;
+    background: transparent; color: var(--muted);
+    font-family: var(--font-body); font-size: 14px; font-weight: 400;
+    cursor: pointer; transition: all 0.15s; text-align: left;
+    margin-bottom: 2px;
+  }
+  .nav-btn:hover { background: var(--surface2); color: var(--text); }
+  .nav-btn.active { background: rgba(124,109,250,0.15); color: var(--accent); font-weight: 500; }
+  .nav-btn .icon { width: 18px; text-align: center; font-size: 16px; }
+
+  .sidebar-bottom { margin-top: auto; padding-top: 16px; border-top: 1px solid var(--border); }
+  .user-chip { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 10px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0; }
+  .user-name { font-size: 13px; font-weight: 500; }
+  .user-email { font-size: 11px; color: var(--muted); }
+  .sign-out-btn { width: 100%; margin-top: 8px; padding: 8px 12px; background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.15s; }
+  .sign-out-btn:hover { background: rgba(250,109,138,0.1); border-color: var(--accent2); color: var(--accent2); }
+  .theme-toggle-btn { width: 100%; margin-top: 8px; padding: 8px 12px; background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); font-size: 12px; cursor: pointer; transition: all 0.15s; text-align: left; }
+  .theme-toggle-btn:hover { background: rgba(124,109,250,0.1); border-color: var(--accent); color: var(--accent); }
+
+  /* ── CONTENT ── */
+  .content { flex: 1; padding: 32px; overflow-y: auto; }
+  .page { display: none; animation: fadeUp 0.3s ease both; }
+  .page.active { display: block; }
+
+  .page-header { margin-bottom: 28px; }
+  .page-header h1 { font-family: var(--font-head); font-size: 28px; font-weight: 800; letter-spacing: -0.5px; }
+  .page-header p { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+  /* ── TRIP SELECTOR ── */
+  .trip-bar {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 24px;
+    padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; flex-wrap: wrap;
+  }
+  .trip-bar label { font-size: 13px; color: var(--muted); }
+  /* ── DASHBOARD TRIP PILLS ── */
+  .trip-pills { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; flex: 1; }
+  .trip-pill {
+    padding: 6px 14px; border-radius: 20px; font-size: 13px; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    font-family: var(--font-body); transition: all 0.15s; white-space: nowrap;
+  }
+  .trip-pill:hover { border-color: var(--accent); color: var(--accent); }
+  .trip-pill.active { background: rgba(124,109,250,0.15); border-color: var(--accent); color: var(--accent); font-weight: 500; }
+  .trip-select {
+    flex: 1; min-width: 160px; background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: 8px; padding: 8px 12px; font-family: var(--font-body); font-size: 14px;
+  }
+  .btn-sm {
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    cursor: pointer; border: none; transition: all 0.15s; font-family: var(--font-body);
+  }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #9080ff; transform: translateY(-1px); }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: rgba(250,109,138,0.15); border: 1px solid rgba(250,109,138,0.3); color: var(--accent2); }
+  .btn-danger:hover { background: rgba(250,109,138,0.25); }
+
+  /* ── STAT CARDS ── */
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px 22px;
+    position: relative; overflow: hidden;
+    transition: transform 0.15s, border-color 0.15s, box-shadow 0.15s;
+  }
+  .stat-card[onclick] { cursor: pointer; }
+  .stat-card[onclick]:hover { transform: translateY(-3px); border-color: var(--accent-color, var(--accent)); box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+  .stat-card[onclick]:active { transform: translateY(-1px); }
+  .stat-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--accent-color, var(--accent));
+  }
+  .stat-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 8px; }
+  .stat-value { font-family: var(--font-head); font-size: 26px; font-weight: 700; }
+  .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* ── FORM ── */
+  .form-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 32px;
+    max-width: 680px;
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .form-row.full { grid-template-columns: 1fr; }
+  .form-row.three { grid-template-columns: 1fr 1fr 1fr; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+  .field input, .field select, .field textarea {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); border-radius: var(--radius-sm); padding: 10px 14px;
+    font-family: var(--font-body); font-size: 14px; transition: border-color 0.15s;
+    outline: none;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+  .field input.error, .field select.error { border-color: var(--accent2); }
+  .field .err-msg { font-size: 11px; color: var(--accent2); }
+
+  /* ── SPLIT SECTION ── */
+  .split-toggle { display: flex; gap: 8px; margin-bottom: 16px; }
+  .split-opt {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: transparent; color: var(--muted); cursor: pointer;
+    font-size: 13px; transition: all 0.15s; font-family: var(--font-body);
+  }
+  .split-opt.active { background: rgba(124,109,250,0.15); border-color: var(--accent); color: var(--accent); }
+
+  .members-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .member-chip {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .member-chip.selected { border-color: var(--accent); background: rgba(124,109,250,0.1); }
+  .member-chip input[type=checkbox] { accent-color: var(--accent); }
+  .member-chip span { font-size: 13px; }
+
+  .unequal-inputs { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
+  .unequal-row { display: flex; align-items: center; gap: 8px; }
+  .unequal-row label { font-size: 13px; flex: 1; }
+  .unequal-row input { width: 80px; text-align: right; }
+
+  .submit-btn {
+    width: 100%; padding: 14px; background: var(--accent); color: white;
+    border: none; border-radius: 12px; font-family: var(--font-head);
+    font-size: 16px; font-weight: 700; cursor: pointer; margin-top: 8px;
+    transition: all 0.2s; letter-spacing: 0.3px;
+  }
+  .submit-btn:hover { background: #9080ff; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(124,109,250,0.4); }
+  .submit-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+  /* ── EXPENSE LIST ── */
+  .expense-list { display: flex; flex-direction: column; gap: 8px; }
+  .expense-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px 20px;
+    display: flex; align-items: center; gap: 16px;
+    transition: border-color 0.15s; cursor: pointer;
+  }
+  .expense-card:hover { border-color: var(--accent); }
+  .cat-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .expense-info { flex: 1; }
+  .expense-name { font-weight: 500; font-size: 15px; }
+  .expense-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .expense-amount { font-family: var(--font-head); font-size: 18px; font-weight: 700; }
+  .expense-paidby { font-size: 12px; color: var(--muted); text-align: right; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .badge-equal { background: rgba(109,250,188,0.15); color: var(--accent3); }
+  .badge-unequal { background: rgba(250,188,109,0.15); color: var(--warning); }
+
+  /* ── SETTLEMENT CARDS ── */
+  .settlement-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .settle-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px 20px;
+  }
+  .settle-card .arrow { color: var(--accent2); font-size: 18px; margin: 0 8px; }
+  .settle-people { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 14px; }
+  .settle-amount { font-family: var(--font-head); font-size: 22px; font-weight: 700; color: var(--accent2); }
+  .settle-note { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .settle-gets { color: var(--accent3) !important; }
+
+  /* ── CHARTS ── */
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+  .chart-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px;
+  }
+  .chart-card h3 { font-family: var(--font-head); font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+  .chart-wrap { position: relative; height: 220px; }
+
+  /* ── EDIT MODAL ── */
+  .close-btn {
+    position: absolute; top: 16px; right: 16px;
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--muted); width: 32px; height: 32px; border-radius: 8px;
+    cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  }
+  .close-btn:hover { color: var(--text); }
+
+  /* ── TOAST ── */
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 20px;
+    font-size: 14px; z-index: 9000;
+    animation: slideLeft 0.3s ease both;
+    max-width: 320px; box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .toast.success { border-color: rgba(109,250,188,0.4); color: var(--accent3); }
+  .toast.error { border-color: rgba(250,109,138,0.4); color: var(--accent2); }
+
+  /* ── EMPTY STATE ── */
+  .empty { text-align: center; padding: 64px 24px; color: var(--muted); }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; }
+  .empty h3 { font-family: var(--font-head); font-size: 20px; color: var(--text); margin-bottom: 8px; }
+
+  /* ── CONFIG PAGE ── */
+  .config-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin-bottom: 20px; max-width: 640px; }
+  .config-card h3 { font-family: var(--font-head); font-size: 17px; font-weight: 700; margin-bottom: 16px; }
+  .config-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .config-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .config-label { font-size: 14px; }
+  .config-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+  /* ── TOGGLE SWITCH ── */
+  .toggle-switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--border); border-radius: 24px; transition: background 0.2s; }
+  .toggle-slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 3px; bottom: 3px; background: white; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 4px rgba(0,0,0,0.3); }
+  .toggle-switch input:checked + .toggle-slider { background: var(--accent3); }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; background: rgba(124,109,250,0.15); color: var(--accent); border: 1px solid rgba(124,109,250,0.3); }
+
+  /* ── MEMBER PILL ── */
+  .member-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .member-pill {
+    display: flex; align-items: center; gap: 6px; padding: 5px 12px;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; font-size: 13px;
+  }
+  .member-pill .remove { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; line-height: 1; padding: 0; }
+  .member-pill .remove:hover { color: var(--accent2); }
+
+  /* ── ANIMATIONS ── */
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes slideRight { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
+  @keyframes slideLeft { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: translateX(0); } }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ══════════════════════════════════════
+     MOBILE — complete bottom-nav layout
+     ══════════════════════════════════════ */
+
+  /* ── MOBILE TOP BAR ── */
+  .mobile-topbar {
+    display: none;
+    position: sticky; top: 0; z-index: 200;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 16px;
+    height: 52px;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .mobile-topbar .m-logo img { height: 28px; width: auto; display: block; }
+  .mobile-topbar .m-user { display: flex; align-items: center; gap: 8px; }
+  .mobile-topbar .m-avatar {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent); display: flex; align-items: center;
+    justify-content: center; font-size: 12px; font-weight: 700;
+  }
+  .mobile-topbar .m-sync {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    border-radius: 8px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+  }
+
+  /* ── MOBILE BOTTOM NAV ── */
+  .mobile-nav {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 8px 4px calc(8px + env(safe-area-inset-bottom));
+    justify-content: space-around;
+  }
+  .m-nav-btn {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    background: none; border: none; color: var(--muted);
+    font-size: 10px; cursor: pointer; padding: 4px 12px;
+    border-radius: 10px; transition: color 0.15s;
+    font-family: var(--font-body);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .m-nav-btn .m-icon { font-size: 20px; line-height: 1; }
+  .m-nav-btn.active { color: var(--accent); }
+  .m-nav-btn.add-btn .m-icon {
+    width: 44px; height: 44px; background: var(--accent);
+    border-radius: 14px; display: flex; align-items: center;
+    justify-content: center; font-size: 22px; color: white;
+    margin-bottom: 0;
+    box-shadow: 0 4px 16px rgba(124,109,250,0.5);
+  }
+  .m-nav-btn.add-btn { color: var(--muted); margin-top: -8px; }
+  .m-nav-btn.add-btn.active { color: var(--accent); }
+
+  @media (max-width: 768px) {
+    /* layout */
+    .sidebar { display: none !important; }
+    .mobile-topbar { display: flex; }
+    .mobile-nav { display: flex; }
+    #main-app { flex-direction: column; }
+    .content {
+      padding: 12px 12px calc(80px + env(safe-area-inset-bottom)) 12px;
+      min-height: 100vh;
+    }
+
+    /* page headers compact */
+    .page-header { margin-bottom: 16px; }
+    .page-header h1 { font-size: 20px; }
+    .page-header p { font-size: 13px; }
+
+    /* login */
+    #login-screen { padding: 16px; box-sizing: border-box; }
+    .login-card { padding: 24px 16px 32px; width: 100%; max-width: 100%; box-sizing: border-box; border-radius: 20px; }
+    .logo img { width: 100%; max-width: 240px; }
+    .login-sub { font-size: 13px; margin-bottom: 24px; }
+
+    /* stats 2-col on mobile */
+    .stats-row { grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+    .stat-card { padding: 14px 16px; }
+    .stat-value { font-size: 20px; }
+
+    /* charts single col */
+    .charts-grid { grid-template-columns: 1fr; gap: 12px; margin-bottom: 14px; }
+    .chart-wrap { height: 180px; }
+
+    /* trip bar wrap */
+    .trip-bar { gap: 8px; padding: 10px 12px; flex-wrap: wrap; }
+    .trip-bar label { display: none; }
+    .trip-select { font-size: 13px; padding: 7px 10px; }
+
+    /* ── ADD EXPENSE FORM — mobile compact ── */
+    .form-card {
+      background: transparent;
+      border: none;
+      padding: 0;
+      max-width: 100%;
+    }
+
+    /* Amount hero — big centered input */
+    .mobile-amount-hero {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px 16px 16px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .mobile-amount-hero .curr-sym {
+      font-family: var(--font-head);
+      font-size: 28px; color: var(--muted);
+    }
+    .mobile-amount-hero input#exp-amount {
+      background: transparent; border: none; outline: none;
+      font-family: var(--font-head); font-size: 44px; font-weight: 800;
+      color: var(--text); width: 100%; text-align: center;
+      padding: 4px 0; letter-spacing: -2px;
+    }
+    .mobile-amount-hero input#exp-amount::placeholder { color: var(--border); }
+    .mobile-amount-hero .curr-row {
+      display: flex; justify-content: center; gap: 8px; margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .curr-chip {
+      padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border); background: var(--surface2);
+      color: var(--muted); cursor: pointer; transition: all 0.1s;
+    }
+    .curr-chip.active { background: rgba(124,109,250,0.2); border-color: var(--accent); color: var(--accent); }
+
+    /* compact field rows */
+    .form-row, .form-row.three, .form-row.full { grid-template-columns: 1fr; gap: 10px; margin-bottom: 10px; }
+    .field label { font-size: 11px; }
+    .field input, .field select, .field textarea { padding: 10px 12px; font-size: 15px; border-radius: 10px; }
+
+    /* paidby + trip inline */
+    .mobile-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+
+    /* category pill picker */
+    .cat-pills { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    .cat-pills::-webkit-scrollbar { display: none; }
+    .cat-pill {
+      flex-shrink: 0; padding: 8px 14px; border-radius: 24px;
+      border: 1px solid var(--border); background: var(--surface);
+      font-size: 13px; cursor: pointer; white-space: nowrap;
+      transition: all 0.15s; color: var(--muted);
+    }
+    .cat-pill.active { border-color: var(--accent); background: rgba(124,109,250,0.15); color: var(--accent); }
+
+    /* split section */
+    .split-toggle { gap: 6px; flex-wrap: nowrap; }
+    .split-opt { padding: 8px 10px; font-size: 12px; flex: 1; text-align: center; }
+    .members-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px; }
+    .member-chip { padding: 7px 8px; }
+    .member-chip span { font-size: 12px; }
+
+    /* submit button */
+    .submit-btn { font-size: 15px; padding: 16px; border-radius: 14px; margin-top: 12px; }
+
+    /* expense list cards */
+    .expense-card { padding: 12px 14px; gap: 10px; }
+    .expense-name { font-size: 14px; }
+    .expense-amount { font-size: 16px; }
+    .cat-icon { width: 36px; height: 36px; font-size: 16px; }
+
+    /* settlement cards */
+    .settlement-grid { grid-template-columns: 1fr; gap: 10px; }
+    .settle-card { padding: 14px 16px; }
+    .settle-amount { font-size: 20px; }
+    .settle-actions { gap: 6px; }
+    .settle-btn { padding: 7px 10px; font-size: 11px; }
+
+    /* send all reminder bar */
+    .send-all-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
+
+    /* modals full screen on mobile */
+    .modal-overlay { padding: 0; align-items: flex-end; }
+    .modal {
+      border-radius: 24px 24px 0 0;
+      max-height: 92vh;
+      padding: 28px 20px 32px;
+      max-width: 100%;
+    }
+
+    /* settings page */
+    .config-card { padding: 18px 16px; }
+    .config-card h3 { font-size: 15px; }
+
+    /* history filter bar scroll */
+    .trip-bar.hist-bar { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+    .trip-bar.hist-bar .trip-select, .trip-bar.hist-bar input { min-width: 120px; flex-shrink: 0; }
+  }
+
+  /* hide mobile UI on desktop */
+  @media (min-width: 769px) {
+    .mobile-topbar { display: none !important; }
+    .mobile-nav { display: none !important; }
+    .mobile-amount-hero { display: none !important; }
+    .cat-pills { display: none !important; }
+    .mobile-only-row { display: none !important; }
+    .mobile-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+    .desktop-only-row { display: grid !important; }
+    #exp-date-mob, #exp-cat-mob { display: none !important; }
+  }
+
+  @media (max-width: 768px) {
+    .desktop-only-field { display: none !important; }
+    .desktop-only-row { display: none !important; }
+    #exp-date { display: none !important; }
+    #exp-cat { display: none !important; }
+  }
+
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  .flex { display: flex; }
+  .gap-2 { gap: 8px; }
+  .mt-2 { margin-top: 8px; }
+  .mt-4 { margin-top: 16px; }
+  .text-muted { color: var(--muted); }
+  .text-sm { font-size: 13px; }
+  select option { background: var(--surface2); }
+
+  .loading { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── IN-APP BROWSER BANNER ── */
+  #iab-banner {
+    display: none;
+    position: fixed; inset: 0; z-index: 99999;
+    background: var(--bg);
+    flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px 24px;
+    text-align: center;
+  }
+  #iab-banner.show { display: flex; }
+  .iab-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 40px 32px;
+    max-width: 380px; width: 100%;
+    box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+  }
+  .iab-icon { font-size: 56px; margin-bottom: 16px; }
+  .iab-title {
+    font-family: var(--font-head); font-size: 22px; font-weight: 800;
+    letter-spacing: -0.5px; margin-bottom: 10px;
+  }
+  .iab-title span { color: var(--accent2); }
+  .iab-desc {
+    color: var(--muted); font-size: 14px; line-height: 1.7;
+    margin-bottom: 28px;
+  }
+  .iab-steps {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 24px;
+    text-align: left;
+  }
+  .iab-steps-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 12px; font-weight: 600;
+  }
+  .iab-step {
+    display: flex; align-items: flex-start; gap: 10px;
+    margin-bottom: 10px; font-size: 13px; line-height: 1.5;
+  }
+  .iab-step:last-child { margin-bottom: 0; }
+  .iab-step-num {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+  }
+  .iab-url-chip {
+    display: inline-block; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; font-family: monospace;
+    color: var(--accent); margin-bottom: 16px; word-break: break-all;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .iab-url-chip:hover { border-color: var(--accent); }
+  .iab-copy-btn {
+    width: 100%; padding: 13px;
+    background: var(--accent); color: white; border: none;
+    border-radius: 12px; font-family: var(--font-head);
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s; letter-spacing: 0.3px;
+  }
+  .iab-copy-btn:hover { background: #9080ff; transform: translateY(-1px); }
+  .iab-copy-btn:active { transform: translateY(0); }
+  .iab-note {
+    margin-top: 16px; font-size: 12px; color: var(--muted); line-height: 1.5;
+  }
+  .iab-app-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    background: rgba(250,109,138,0.12); border: 1px solid rgba(250,109,138,0.25);
+    color: var(--accent2); margin-bottom: 16px;
+  }
+
+  .progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .progress-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+  /* ── SETTLE UP MODAL ── */
+  .settle-modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 28px; margin-bottom: 16px; }
+  .settle-type-toggle { display: flex; gap: 8px; margin-bottom: 20px; }
+  .settle-type-btn { flex: 1; padding: 10px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; transition: all 0.15s; font-family: var(--font-body); }
+  .settle-type-btn.active { background: rgba(109,250,188,0.15); border-color: var(--accent3); color: var(--accent3); font-weight: 500; }
+  .settle-summary-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+  .settle-summary-box .arrow { color: var(--accent2); margin: 0 6px; }
+  .settle-partial-amount { width: 100%; margin-top: 12px; }
+
+  /* ── EMAIL REMINDER BTN ── */
+  .btn-email { background: rgba(109,250,188,0.1); border: 1px solid rgba(109,250,188,0.3); color: var(--accent3); }
+  .btn-email:hover { background: rgba(109,250,188,0.2); }
+  .settle-actions-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 20px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .settle-actions-bar label { font-size: 13px; color: var(--muted); margin-right: auto; }
+
+  /* ── SETTLED BADGE ── */
+  .badge-settled { background: rgba(109,250,188,0.15); color: var(--accent3); border: 1px solid rgba(109,250,188,0.3); padding: 2px 8px; border-radius: 20px; font-size: 11px; }
+  .settle-card.is-settled { opacity: 0.55; }
+  .settle-card.is-settled .settle-amount { text-decoration: line-through; color: var(--muted); }
+
+  /* ── PARTIAL SETTLE HISTORY ── */
+  .partial-list { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+  .partial-item { font-size: 12px; color: var(--muted); padding: 4px 8px; background: var(--surface2); border-radius: 6px; display: flex; justify-content: space-between; }
+
+  /* Setup steps */
+  .step-list { counter-reset: steps; }
+  .step-item {
+    counter-increment: steps; display: flex; gap: 12px; padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .step-item:last-child { border-bottom: none; }
+  .step-num {
+    width: 24px; height: 24px; border-radius: 50%; background: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .step-content { flex: 1; }
+  .step-title { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .step-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  code { background: var(--surface2); padding: 1px 6px; border-radius: 4px; font-size: 12px; color: var(--accent); font-family: monospace; }
+</style>
+</head>
+<body>
+<div class="blob blob-1"></div>
+<div class="blob blob-2"></div>
+<div class="blob blob-3"></div>
+
+<div id="app">
+
+<!-- ════════════ LOGIN SCREEN ════════════ -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="logo"><img src="images/splitmate-logo.png" alt="SplitMate" /></div>
+    <div class="login-sub">Track group expenses across trips &amp; meetups.<br/>Sign in with your Google account to get started.</div>
+    <button id="google-signin-btn" class="google-btn" onclick="handleGoogleSignIn()">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Continue with Google
+    </button>
+
+    <div class="request-access-link">Don't have access? <button onclick="toggleRequestAccessForm()">Request Access</button></div>
+
+    <div class="request-access-form" id="request-access-form">
+      <label>Your email address</label>
+      <input type="email" id="req-email" placeholder="you@example.com" />
+      <button class="req-btn" id="req-submit-btn" onclick="submitAccessRequest()">Send Request</button>
+      <div class="req-status" id="req-status"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════ MAIN APP ════════════ -->
+<div id="main-app">
+
+  <!-- ── MOBILE TOP BAR ── -->
+  <div class="mobile-topbar">
+    <div class="m-logo"><img src="images/splitmate-logo.png" alt="SplitMate" /></div>
+    <div class="m-user">
+      <button class="m-sync" onclick="syncFromSheet()">🔄</button>
+      <div style="position:relative">
+        <div class="m-avatar" id="mob-avatar" onclick="toggleMobMenu()" style="cursor:pointer">?</div>
+        <div id="mob-menu" style="display:none;position:absolute;right:0;top:38px;background:var(--surface);border:1px solid var(--border);border-radius:12px;min-width:160px;z-index:999;box-shadow:0 8px 32px rgba(0,0,0,0.5);overflow:hidden">
+          <div id="mob-menu-name" style="padding:10px 14px;font-size:12px;font-weight:600;border-bottom:1px solid var(--border);color:var(--muted)"></div>
+          <button onclick="syncFromSheet();toggleMobMenu()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 14px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;text-align:left">🔄 Sync</button>
+          <button id="mob-theme-btn" onclick="toggleTheme();toggleMobMenu()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 14px;background:none;border:none;color:var(--text);font-size:13px;cursor:pointer;text-align:left;border-top:1px solid var(--border)">☀️ Light mode</button>
+          <button onclick="handleSignOut()" style="display:flex;align-items:center;gap:8px;width:100%;padding:11px 14px;background:none;border:none;color:var(--accent2);font-size:13px;cursor:pointer;text-align:left;border-top:1px solid var(--border)">↩ Sign out</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MOBILE BOTTOM NAV ── -->
+  <nav class="mobile-nav" id="mobile-nav">
+    <button class="m-nav-btn active" id="mnav-dashboard" onclick="showPage('dashboard')">
+      <span class="m-icon">📊</span>Home
+    </button>
+    <button class="m-nav-btn" id="mnav-history" onclick="showPage('history')">
+      <span class="m-icon">📋</span>History
+    </button>
+    <button class="m-nav-btn add-btn" id="mnav-add" onclick="showPage('add')">
+      <span class="m-icon">＋</span>Add
+    </button>
+    <button class="m-nav-btn" id="mnav-summary" onclick="showPage('summary')">
+      <span class="m-icon">⚖️</span>Settle
+    </button>
+    <button class="m-nav-btn" id="mnav-settings" onclick="showPage('settings')">
+      <span class="m-icon">⚙️</span>More
+    </button>
+  </nav>
+  <nav class="sidebar">
+    <div class="sidebar-logo"><img src="images/splitmate-logo.png" alt="SplitMate" /></div>
+
+    <div class="nav-section">
+      <div class="nav-label">Overview</div>
+      <button class="nav-btn active" onclick="showPage('dashboard')"><span class="icon">📊</span> Dashboard</button>
+      <button class="nav-btn" onclick="showPage('summary')"><span class="icon">⚖️</span> Settlement</button>
+    </div>
+
+    <div class="nav-section" style="margin-top:8px">
+      <div class="nav-label">Expenses</div>
+      <button class="nav-btn" onclick="showPage('add')"><span class="icon">➕</span> Add Expense</button>
+      <button class="nav-btn" onclick="showPage('history')"><span class="icon">📋</span> History</button>
+    </div>
+
+    <div class="nav-section" id="nav-section-settings" style="margin-top:8px">
+      <div class="nav-label">Settings</div>
+      <button class="nav-btn" id="nav-settings" onclick="showPage('settings')"><span class="icon">⚙️</span> Settings</button>
+      <button class="nav-btn" id="nav-setup" onclick="showPage('setup')"><span class="icon">📖</span> Setup Guide</button>
+    </div>
+
+    <div class="sidebar-bottom">
+      <div class="user-chip">
+        <div class="avatar" id="user-avatar">?</div>
+        <div>
+          <div class="user-name" id="user-name">Loading...</div>
+          <div class="user-email" id="user-email"></div>
+        </div>
+      </div>
+      <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()">☀️ Light mode</button>
+      <button class="sign-out-btn" onclick="handleSignOut()">Sign out</button>
+    </div>
+  </nav>
+
+  <main class="content">
+
+    <!-- ── DASHBOARD ── -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <h1>Dashboard</h1>
+        <p>Overview of all group expenses</p>
+      </div>
+
+      <div class="trip-bar">
+        <div id="trip-pills" class="trip-pills"></div>
+        <!-- hidden select kept for compatibility with other pages -->
+        <select id="trip-filter" style="display:none"><option value="all">All trips</option></select>
+        <button class="btn-sm btn-primary" id="new-trip-btn" onclick="openNewTripModal()">+ New Trip</button>
+      </div>
+
+      <div class="stats-row" id="stats-row">
+        <div class="stat-card" style="--accent-color: var(--accent)" onclick="statCardNav('history')">
+          <div class="stat-label">Total Spent</div>
+          <div class="stat-value" id="stat-total">—</div>
+          <div class="stat-sub">across all members</div>
+        </div>
+        <div class="stat-card" style="--accent-color: var(--accent2)" onclick="statCardNav('summary')">
+          <div class="stat-label">You Owe</div>
+          <div class="stat-value" id="stat-owe" style="color:var(--accent2)">—</div>
+          <div class="stat-sub">net balance · tap to settle</div>
+        </div>
+        <div class="stat-card" style="--accent-color: var(--accent3)" onclick="statCardNav('summary')">
+          <div class="stat-label">Owed to You</div>
+          <div class="stat-value" id="stat-owed" style="color:var(--accent3)">—</div>
+          <div class="stat-sub">net balance · tap to settle</div>
+        </div>
+        <div class="stat-card" style="--accent-color: var(--warning)" onclick="statCardNav('history')">
+          <div class="stat-label">Expenses Count</div>
+          <div class="stat-value" id="stat-count">—</div>
+          <div class="stat-sub">total entries · tap to view</div>
+        </div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>💸 Spending by Category</h3>
+          <div class="chart-wrap"><canvas id="chart-category"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <h3>👥 Per-Person Spending</h3>
+          <div class="chart-wrap"><canvas id="chart-person"></canvas></div>
+        </div>
+      </div>
+
+      <div class="chart-card" style="margin-bottom:20px">
+        <h3>📈 Expenses Over Time</h3>
+        <div class="chart-wrap" style="height:180px"><canvas id="chart-timeline"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ── SETTLEMENT ── -->
+    <div class="page" id="page-summary">
+      <div class="page-header">
+        <h1>Settlement</h1>
+        <p>Who owes whom — simplified debts</p>
+      </div>
+      <div class="trip-bar">
+        <label>Trip / Event:</label>
+        <select class="trip-select" id="trip-filter-summary" onchange="syncTripFilter(this.value);persistActiveTrip(this.value);renderSummary()">
+          <option value="all">All trips</option>
+        </select>
+      </div>
+      <div id="settlement-content"></div>
+    </div>
+
+    <!-- ── ADD EXPENSE ── -->
+    <div class="page" id="page-add">
+      <div class="page-header">
+        <h1>Add Expense</h1>
+        <p>Log a new group expense</p>
+      </div>
+      <div class="form-card">
+
+        <!-- ══ MOBILE ONLY: big amount hero ══ -->
+        <div class="mobile-amount-hero">
+          <div class="curr-sym" id="mob-curr-sym">₹</div>
+          <input type="number" id="exp-amount" placeholder="0" min="0" step="0.01" oninput="updateUnequalTotal(); updateMobCurrSym()" onblur="validateField('amount')" inputmode="decimal" />
+          <span class="err-msg" id="err-amount" style="display:block;text-align:center;margin-top:4px"></span>
+          <div class="curr-row" id="mob-curr-row">
+            <span class="curr-chip active" onclick="setCurrency('INR',this)">₹ INR</span>
+            <span class="curr-chip" onclick="setCurrency('USD',this)">$ USD</span>
+            <span class="curr-chip" onclick="setCurrency('EUR',this)">€ EUR</span>
+            <span class="curr-chip" onclick="setCurrency('GBP',this)">£ GBP</span>
+            <span class="curr-chip" onclick="setCurrency('AED',this)">AED</span>
+            <span class="curr-chip" onclick="setCurrency('SGD',this)">S$</span>
+          </div>
+        </div>
+
+        <!-- ══ MOBILE ONLY: horizontal category pills ══ -->
+        <div class="cat-pills" id="cat-pills">
+          <span class="cat-pill" onclick="setCatPill('🍽️ Food & Drinks',this)">🍽️ Food</span>
+          <span class="cat-pill" onclick="setCatPill('🚗 Transport',this)">🚗 Transport</span>
+          <span class="cat-pill" onclick="setCatPill('🏨 Accommodation',this)">🏨 Stay</span>
+          <span class="cat-pill" onclick="setCatPill('🎉 Activities',this)">🎉 Fun</span>
+          <span class="cat-pill" onclick="setCatPill('🛒 Shopping',this)">🛒 Shop</span>
+          <span class="cat-pill" onclick="setCatPill('💊 Health',this)">💊 Health</span>
+          <span class="cat-pill" onclick="setCatPill('📦 Other',this)">📦 Other</span>
+        </div>
+
+        <div class="form-row">
+          <div class="field">
+            <label>Expense Name *</label>
+            <input type="text" id="exp-name" placeholder="e.g. Dinner at Olive Garden" autocomplete="off" maxlength="200" onblur="validateField('name')" />
+            <span class="err-msg" id="err-name"></span>
+          </div>
+          <div class="field desktop-only-field">
+            <label>Category *</label>
+            <select id="exp-cat" onchange="validateField('cat')">
+              <option value="">Select category</option>
+              <option value="🍽️ Food & Drinks">🍽️ Food & Drinks</option>
+              <option value="🚗 Transport">🚗 Transport</option>
+              <option value="🏨 Accommodation">🏨 Accommodation</option>
+              <option value="🎉 Activities">🎉 Activities & Entertainment</option>
+              <option value="🛒 Shopping">🛒 Shopping</option>
+              <option value="💊 Health">💊 Health</option>
+              <option value="📦 Other">📦 Other</option>
+            </select>
+            <span class="err-msg" id="err-cat"></span>
+          </div>
+        </div>
+
+        <!-- desktop amount/currency/date row (hidden on mobile) -->
+        <div class="form-row three desktop-only-row">
+          <div class="field">
+            <label>Amount *</label>
+            <input type="number" id="exp-amount-desktop" placeholder="0.00" min="0" step="0.01"
+              oninput="document.getElementById('exp-amount').value=this.value; updateUnequalTotal();" onblur="validateField('amount')" />
+            <span class="err-msg" id="err-amount-desktop"></span>
+          </div>
+          <div class="field">
+            <label>Currency</label>
+            <select id="exp-currency" onchange="updateMobCurrSym()">
+              <option value="INR">₹ INR</option>
+              <option value="USD">$ USD</option>
+              <option value="EUR">€ EUR</option>
+              <option value="GBP">£ GBP</option>
+              <option value="JPY">¥ JPY</option>
+              <option value="AED">AED</option>
+              <option value="SGD">S$ SGD</option>
+              <option value="THB">฿ THB</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Date *</label>
+            <input type="date" id="exp-date" onblur="validateField('date')" />
+            <span class="err-msg" id="err-date"></span>
+          </div>
+        </div>
+
+        <!-- mobile: date on its own compact row -->
+        <div class="mobile-two-col mobile-only-row">
+          <div class="field">
+            <label>Date *</label>
+            <input type="date" id="exp-date-mob" oninput="document.getElementById('exp-date').value=this.value" onblur="validateField('date')" />
+            <span class="err-msg" id="err-date-mob"></span>
+          </div>
+          <div class="field">
+            <label>Category *</label>
+            <select id="exp-cat-mob" onchange="document.getElementById('exp-cat').value=this.value; syncCatPills(this.value); validateField('cat')">
+              <option value="">Category</option>
+              <option value="🍽️ Food & Drinks">🍽️ Food</option>
+              <option value="🚗 Transport">🚗 Transport</option>
+              <option value="🏨 Accommodation">🏨 Stay</option>
+              <option value="🎉 Activities">🎉 Fun</option>
+              <option value="🛒 Shopping">🛒 Shop</option>
+              <option value="💊 Health">💊 Health</option>
+              <option value="📦 Other">📦 Other</option>
+            </select>
+            <span class="err-msg" id="err-cat-mob"></span>
+          </div>
+        </div>
+
+        <!-- Paid By + Trip — shown on both desktop & mobile (2-col on mobile) -->
+        <div class="mobile-two-col" style="margin-bottom:0">
+          <div class="field">
+            <label>Paid By *</label>
+            <select id="exp-paidby" onchange="validateField('paidby')">
+              <option value="">Select person</option>
+            </select>
+            <span class="err-msg" id="err-paidby"></span>
+          </div>
+          <div class="field">
+            <label>Trip / Event</label>
+            <select id="exp-trip">
+              <option value="General">General</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- desktop-only standalone paidby+trip row (mobile uses mobile-two-col above) -->
+        <div class="form-row desktop-only-row" style="display:none">
+          <!-- intentionally empty; mobile-two-col handles it on mobile via display:contents -->
+        </div>
+
+        <div class="form-row full" style="margin-top:10px">
+          <div class="field">
+            <label>Notes</label>
+            <input type="text" id="exp-notes" placeholder="Optional description..." autocomplete="off" maxlength="500" />
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div style="margin-bottom:10px; font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px;">Split Type</div>
+
+        <div class="split-toggle">
+          <button class="split-opt active" onclick="setSplitType('equal')">⚖️ Split Equally</button>
+          <button class="split-opt" onclick="setSplitType('unequal')">✏️ Split Unequally</button>
+          <button class="split-opt" onclick="setSplitType('percent')">% By Percent</button>
+        </div>
+
+        <div id="split-equal-section">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">Select who's included:</div>
+          <div class="members-grid" id="equal-members"></div>
+        </div>
+
+        <div id="split-unequal-section" style="display:none">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">Enter exact amounts for each person:</div>
+          <div class="unequal-inputs" id="unequal-inputs"></div>
+          <div style="margin-top:8px; font-size:13px;">
+            Total assigned: <strong id="unequal-total">0.00</strong> /
+            <span id="unequal-target">0.00</span>
+            <span id="unequal-diff" style="color:var(--accent2); margin-left:6px;"></span>
+          </div>
+        </div>
+
+        <div id="split-percent-section" style="display:none">
+          <div style="font-size:13px; color:var(--muted); margin-bottom:8px;">Enter percentage for each person (must total 100%):</div>
+          <div class="unequal-inputs" id="percent-inputs"></div>
+          <div style="margin-top:8px; font-size:13px;">
+            Total %: <strong id="percent-total">0</strong>%
+            <span id="percent-diff" style="color:var(--accent2); margin-left:6px;"></span>
+          </div>
+        </div>
+
+        <span class="err-msg" id="err-split" style="display:block; margin-top:8px;"></span>
+
+        <button class="submit-btn" onclick="submitExpense()" id="submit-btn">💾 Save Expense</button>
+      </div>
+    </div>
+
+    <!-- ── HISTORY ── -->
+    <div class="page" id="page-history">
+      <div class="page-header">
+        <h1>Expense History</h1>
+        <p>All logged expenses — click any to edit</p>
+      </div>
+      <div class="trip-bar hist-bar" style="gap:8px">
+        <label>Filter:</label>
+        <select class="trip-select" id="hist-trip" onchange="persistActiveTrip(this.value);renderHistory()" style="max-width:180px">
+          <option value="all">All trips</option>
+        </select>
+        <select class="trip-select" id="hist-cat" onchange="renderHistory()" style="max-width:160px">
+          <option value="all">All categories</option>
+          <option value="🍽️ Food & Drinks">🍽️ Food</option>
+          <option value="🚗 Transport">🚗 Transport</option>
+          <option value="🏨 Accommodation">🏨 Accommodation</option>
+          <option value="🎉 Activities">🎉 Activities</option>
+          <option value="🛒 Shopping">🛒 Shopping</option>
+          <option value="📦 Other">📦 Other</option>
+        </select>
+        <select class="trip-select" id="hist-sort" onchange="renderHistory()" style="max-width:160px">
+          <option value="date-desc">📅 Newest first</option>
+          <option value="date-asc">📅 Oldest first</option>
+          <option value="amount-desc">💰 Highest first</option>
+          <option value="amount-asc">💰 Lowest first</option>
+        </select>
+        <input type="text" class="trip-select" id="hist-search" placeholder="🔍 Search..." oninput="renderHistory()" style="max-width:180px" />
+        <button class="btn-sm btn-ghost" onclick="syncFromSheet()">🔄 Sync</button>
+      </div>
+      <div class="expense-list" id="expense-list"></div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="page" id="page-settings">
+
+      <!-- ════ ADMIN VIEW ════ -->
+      <div id="settings-admin" style="display:none">
+        <div class="page-header">
+          <h1>Settings</h1>
+          <p>Admin controls — changes sync to all members instantly via Google Sheets</p>
+        </div>
+
+        <div class="config-card">
+          <h3>🔗 Google Sheets Connection</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+            Sheet ID is stored only on your device as the entry point. All other config lives inside the sheet itself and is shared with everyone automatically.
+          </p>
+          <div class="field" style="margin-bottom:12px">
+            <label>Spreadsheet ID</label>
+            <input type="text" id="sheet-id-input" placeholder="Paste your Google Sheet ID here..." />
+          </div>
+          <div class="flex gap-2">
+            <button class="btn-sm btn-primary" onclick="saveSheetId()">Save &amp; Connect</button>
+            <button class="btn-sm btn-ghost" onclick="testSheetConnection()">Test Connection</button>
+            <button class="btn-sm btn-ghost" onclick="openSheetInDrive()">Open in Drive ↗</button>
+          </div>
+          <div id="sheet-status" style="margin-top:10px; font-size:13px;"></div>
+        </div>
+
+        <div class="config-card">
+          <h3>👥 Group Members</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+            Saved to the Members tab in Google Sheets. All users get this list on their next sync.<br/>
+            <span style="color:var(--accent2);font-size:12px">⚠️ Email is required — it is used to verify login access.</span>
+          </p>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;gap:8px">
+              <input type="text" class="trip-select" id="new-member-name" placeholder="Full name" style="flex:1;min-width:0" />
+              <button class="btn-sm btn-primary" onclick="addMember()" style="flex-shrink:0;white-space:nowrap">+ Add</button>
+            </div>
+            <input type="email" class="trip-select" id="new-member-email" placeholder="email@gmail.com (required for access)" style="width:100%" />
+            <div id="member-add-err" style="font-size:12px;color:var(--accent2);display:none"></div>
+          </div>
+          <div class="member-list" id="members-list"></div>
+          <div class="divider"></div>
+          <button class="btn-sm btn-primary" onclick="saveMembers()" style="margin-top:4px">💾 Save to Sheet</button>
+        </div>
+
+        <div class="config-card">
+          <h3>✈️ Trips / Events</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+            Saved to the Trips tab in Google Sheets. All users see new trips on their next sync.
+          </p>
+          <div class="flex gap-2">
+            <input type="text" class="trip-select" id="new-trip-name" placeholder="Trip or event name..." style="flex:1" />
+            <button class="btn-sm btn-primary" onclick="addTrip()">Add Trip</button>
+          </div>
+          <div class="member-list" id="trips-list"></div>
+          <div class="divider"></div>
+          <button class="btn-sm btn-primary" onclick="saveTrips()" style="margin-top:4px">💾 Save to Sheet</button>
+        </div>
+
+        <div class="config-card">
+          <h3>📍 Active Trip</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">
+            Sets the default trip filter for all users. Stored in the Settings tab of the sheet — everyone picks it up on next sync.
+          </p>
+          <div class="flex gap-2" style="align-items:center">
+            <select class="trip-select" id="admin-active-trip" style="flex:1">
+              <option value="all">All trips</option>
+            </select>
+            <button class="btn-sm btn-primary" onclick="adminSetActiveTrip()">Set for Everyone</button>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <h3>🌐 Access Control</h3>
+          <div class="config-row">
+            <div><div class="config-label">Authentication</div><div class="config-sub">Only signed-in Google accounts</div></div>
+            <span class="tag">Google OAuth</span>
+          </div>
+          <div class="config-row">
+            <div><div class="config-label">Allowed Emails</div><div class="config-sub">Managed via Members tab in the Google Sheet</div></div>
+            <span class="tag">Invite-only</span>
+          </div>
+          <div class="config-row">
+            <div><div class="config-label">Data Storage</div><div class="config-sub">All data in admin's Google Drive</div></div>
+            <span class="tag">Admin Drive</span>
+          </div>
+          <div class="config-row">
+            <div><div class="config-label">Config sync</div><div class="config-sub">Members, trips &amp; active trip centralised in Sheet</div></div>
+            <span class="tag" style="background:rgba(109,250,188,0.15);color:var(--accent3);border-color:rgba(109,250,188,0.3)">Centralised ✓</span>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <h3>🔔 Notifications</h3>
+          <div class="config-row">
+            <div>
+              <div class="config-label">Email Notifications</div>
+              <div class="config-sub">Send emails on settlements &amp; payment reminders — applies to all members</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" id="email-notif-toggle-admin" onchange="saveEmailNotifPref(this.checked)" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- ════ MEMBER VIEW ════ -->
+      <div id="settings-member" style="display:none">
+        <div class="page-header">
+          <h1>Info</h1>
+          <p>Your account &amp; group details — managed centrally by admin</p>
+        </div>
+
+        <div class="config-card">
+          <h3>👤 Your Account</h3>
+          <div class="config-row">
+            <div><div class="config-label">Signed in as</div><div class="config-sub" id="member-email-display">—</div></div>
+            <span class="tag" style="background:rgba(109,250,188,0.15);color:var(--accent3);border-color:rgba(109,250,188,0.3)">Member</span>
+          </div>
+          <div class="config-row">
+            <div><div class="config-label">Google permissions</div><div class="config-sub">Spreadsheet read/write only — no Drive access</div></div>
+            <span class="tag" style="background:rgba(109,250,188,0.15);color:var(--accent3);border-color:rgba(109,250,188,0.3)">Minimal ✓</span>
+          </div>
+          <div class="config-row">
+            <div><div class="config-label">Data source</div><div class="config-sub">Centralised Google Sheet managed by admin — same view for everyone</div></div>
+            <span class="tag" style="background:rgba(109,250,188,0.15);color:var(--accent3);border-color:rgba(109,250,188,0.3)">Centralised ✓</span>
+          </div>
+          <div style="margin-top:14px">
+            <button class="btn-sm btn-primary" onclick="syncFromSheet()">🔄 Sync latest from Sheet</button>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <h3>👥 Group Members</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Set and managed by admin. Synced from Google Sheets.</p>
+          <div class="member-list" id="members-list-readonly"></div>
+        </div>
+
+        <div class="config-card">
+          <h3>✈️ Trips / Events</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Set and managed by admin. Synced from Google Sheets.</p>
+          <div class="member-list" id="trips-list-readonly"></div>
+        </div>
+
+        <div class="config-card">
+          <h3>📍 Active Trip</h3>
+          <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Currently active trip set by admin — applies to everyone.</p>
+          <div class="config-row">
+            <div><div class="config-label">Active Trip</div><div class="config-sub" id="member-active-trip-display">—</div></div>
+            <span class="tag">Admin controlled</span>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <h3>🌐 Data &amp; Privacy</h3>
+          <div class="config-row">
+            <div><div class="config-label">Data Storage</div><div class="config-sub">Stored in admin's Google Drive Sheet</div></div>
+            <span class="tag">Admin Drive</span>
+          </div>
+          <div class="config-row">
+            <div><div class="config-label">Your permissions</div><div class="config-sub">You can read and write expenses — nothing else</div></div>
+            <span class="tag" style="background:rgba(109,250,188,0.15);color:var(--accent3);border-color:rgba(109,250,188,0.3)">Minimal ✓</span>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <h3>🔔 Notifications</h3>
+          <div class="config-row">
+            <div>
+              <div class="config-label">Email Notifications</div>
+              <div class="config-sub" id="member-notif-status">—</div>
+            </div>
+            <span class="tag" id="member-notif-tag">—</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ── SETUP GUIDE ── -->
+    <div class="page" id="page-setup">
+      <div class="page-header">
+        <h1>Setup Guide</h1>
+        <p>Complete these steps to get SplitMate running</p>
+      </div>
+
+      <div class="config-card">
+        <h3>🚀 One-time Setup Steps</h3>
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num">1</div>
+            <div class="step-content">
+              <div class="step-title">Create a Google Cloud Project</div>
+              <div class="step-desc">Go to <strong>console.cloud.google.com</strong> → Create a new project (e.g. "SplitMate"). Enable the <strong>Google Sheets API</strong> and <strong>Google Drive API</strong> in APIs &amp; Services → Library.</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">2</div>
+            <div class="step-content">
+              <div class="step-title">Set up OAuth 2.0 Credentials</div>
+              <div class="step-desc">APIs &amp; Services → Credentials → Create Credentials → OAuth Client ID. Application type: <code>Web application</code>. Add your app's URL to <strong>Authorized JavaScript origins</strong> and <strong>Authorized redirect URIs</strong>. Copy the <strong>Client ID</strong>.</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">3</div>
+            <div class="step-content">
+              <div class="step-title">Add your Client ID to this file</div>
+              <div class="step-desc">Open this HTML file, find the variable <code>CLIENT_ID</code> near the top of the &lt;script&gt; and paste your OAuth Client ID.</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">4</div>
+            <div class="step-content">
+              <div class="step-title">Create your Google Sheet</div>
+              <div class="step-desc">Create a new Google Sheet in your Drive. The app will auto-create 3 tabs: <code>Expenses</code>, <code>Members</code>, and <code>Trips</code>. Copy the Sheet ID from the URL (the long string between <code>/d/</code> and <code>/edit</code>).</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">5</div>
+            <div class="step-content">
+              <div class="step-title">Connect the Sheet</div>
+              <div class="step-desc">Go to <strong>Settings</strong> → paste your Sheet ID → click <strong>Save &amp; Connect</strong>. The app will initialize all required tabs and columns automatically.</div>
+            </div>
+          </div>
+          <div class="step-item">
+            <div class="step-num">6</div>
+            <div class="step-content">
+              <div class="step-title">Host the app &amp; share with friends</div>
+              <div class="step-desc">Host this single HTML file on <strong>GitHub Pages</strong>, <strong>Netlify</strong>, or <strong>Vercel</strong> (all free). Share the URL with friends — they'll sign in with their Google account. Access is controlled by the Members tab in your Sheet.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="config-card">
+        <h3>📋 Google Sheet Schema</h3>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:12px">The app will auto-create these columns in your sheet:</p>
+        <div style="font-size:13px; line-height:2;">
+          <strong>Expenses tab:</strong><br/>
+          <code>ID</code> <code>Date</code> <code>Name</code> <code>Category</code> <code>Amount</code> <code>Currency</code> <code>PaidBy</code> <code>Trip</code> <code>SplitType</code> <code>Splits</code> <code>Notes</code> <code>AddedBy</code> <code>Timestamp</code>
+          <br/><br/>
+          <strong>Members tab:</strong> <code>Name</code> <code>Email</code>
+          <br/><br/>
+          <strong>Trips tab:</strong> <code>Name</code> <code>CreatedDate</code>
+          <br/><br/>
+          <strong>Settlements tab:</strong> <code>ID</code> <code>Date</code> <code>From</code> <code>To</code> <code>Amount</code> <code>Full</code> <code>Note</code> <code>Timestamp</code>
+          <br/><br/>
+          <strong>Settings tab:</strong> <code>Key</code> <code>Value</code> &nbsp;— stores <code>activeTrip</code> and other prefs (editable directly in sheet)
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ════════════ NEW TRIP MODAL ════════════ -->
+<div class="modal-overlay" id="new-trip-modal" style="display:none" onclick="if(event.target===this)closeNewTripModal()">
+  <div class="modal">
+    <button class="close-btn" onclick="closeNewTripModal()">×</button>
+    <h2>New Trip / Event</h2>
+    <p>Create a new group for tracking expenses together.</p>
+    <div class="field" style="margin-bottom:16px">
+      <label>Trip Name *</label>
+      <input type="text" id="modal-trip-name" placeholder="e.g. Goa 2025, New Year Party..." />
+    </div>
+    <button class="submit-btn" onclick="createTripFromModal()">Create Trip</button>
+  </div>
+</div>
+
+<!-- ════════════ EDIT EXPENSE MODAL ════════════ -->
+<div class="modal-overlay" id="edit-modal" style="display:none" onclick="if(event.target===this)closeEditModal()">
+  <div class="modal" style="max-width:620px">
+    <button class="close-btn" onclick="closeEditModal()">×</button>
+    <h2>Edit Expense</h2>
+    <p>Update the expense details below.</p>
+    <div id="edit-form-content"></div>
+  </div>
+</div>
+
+<!-- ════════════ SETTLE UP MODAL ════════════ -->
+<div class="modal-overlay" id="settle-modal" style="display:none" onclick="if(event.target===this)closeSettleModal()">
+  <div class="modal" style="max-width:500px; position:relative;">
+    <button class="close-btn" onclick="closeSettleModal()">×</button>
+    <h2>💸 Settle Up</h2>
+    <p id="settle-modal-subtitle">Record a payment between members.</p>
+
+    <div class="settle-summary-box" id="settle-modal-info"></div>
+
+    <div class="settle-type-toggle">
+      <button class="settle-type-btn active" id="settle-full-btn" onclick="setSettleType('full')">✅ Full Settlement</button>
+      <button class="settle-type-btn" id="settle-partial-btn" onclick="setSettleType('partial')">✏️ Partial Payment</button>
+    </div>
+
+    <div id="settle-partial-section" style="display:none; margin-bottom:16px;">
+      <div class="field">
+        <label>Amount Paid</label>
+        <input type="number" id="settle-partial-input" class="settle-partial-amount" placeholder="0.00" min="0" step="0.01" />
+      </div>
+    </div>
+
+    <div class="field" style="margin-bottom:16px;">
+      <label>Note (optional)</label>
+      <input type="text" id="settle-note-input" placeholder="e.g. Paid via UPI..." />
+    </div>
+
+    <div class="flex gap-2">
+      <button class="submit-btn" onclick="confirmSettlement()" id="settle-confirm-btn" style="flex:1">Confirm Settlement</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════ IN-APP BROWSER BANNER ════════════ -->
+<div id="iab-banner">
+  <div class="iab-card">
+    <div class="iab-icon">🚫</div>
+    <div class="iab-app-badge" id="iab-app-name">📱 In-App Browser Detected</div>
+    <div class="iab-title">Open in a <span>Real Browser</span></div>
+    <div class="iab-desc">
+      Google Sign-In doesn't work inside WhatsApp, Instagram, or other in-app browsers.
+      You need to open SplitMate in <strong>Chrome</strong> or <strong>Safari</strong> to sign in.
+    </div>
+    <div class="iab-steps">
+      <div class="iab-steps-title">How to open in your browser</div>
+      <div class="iab-step">
+        <div class="iab-step-num">1</div>
+        <div>Tap the <strong>⋯ three-dot menu</strong> (bottom-right on Android) or <strong>⋯ More</strong> (top-right on iPhone)</div>
+      </div>
+      <div class="iab-step">
+        <div class="iab-step-num">2</div>
+        <div>Select <strong>"Open in browser"</strong> or <strong>"Open in Chrome"</strong> / <strong>"Open in Safari"</strong></div>
+      </div>
+      <div class="iab-step">
+        <div class="iab-step-num">3</div>
+        <div>Sign in with Google normally — it'll work perfectly there ✓</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Or copy the link and paste it manually:</div>
+    <div class="iab-url-chip" id="iab-url-display" onclick="copyAppUrl()">splitmate-ai.netlify.app</div>
+    <button class="iab-copy-btn" onclick="copyAppUrl()" id="iab-copy-btn">📋 Copy Link</button>
+    <div class="iab-note">This is a one-time thing — bookmark it in Chrome/Safari for easy access next time.</div>
+  </div>
+</div>
+
+</div><!-- #app -->
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  🚫  IN-APP BROWSER DETECTION
+// ════════════════════════════════════════════════════════════
+(function detectInAppBrowser() {
+  const ua = navigator.userAgent || '';
+  const rules = [
+    { name: '📱 WhatsApp Browser',   pattern: /WhatsApp/i },
+    { name: '📷 Instagram Browser',  pattern: /Instagram/i },
+    { name: '📘 Facebook Browser',   pattern: /FBAN|FBAV|FB_IAB|FB4A|FBIOS/i },
+    { name: '🐦 Twitter Browser',    pattern: /Twitter/i },
+    { name: '💬 Messenger Browser',  pattern: /Messenger/i },
+    { name: '📌 Pinterest Browser',  pattern: /Pinterest/i },
+    { name: '🎵 TikTok Browser',     pattern: /musical_ly|TikTok/i },
+    { name: '📸 Snapchat Browser',   pattern: /Snapchat/i },
+    { name: '📧 Gmail Browser',      pattern: /GSA\//i },
+    { name: '🔗 LinkedIn Browser',   pattern: /LinkedInApp/i },
+  ];
+
+  const matched = rules.find(r => r.pattern.test(ua));
+
+  // Also catch generic WebView on Android (not a known standalone browser)
+  const isAndroidWebView = /Android/.test(ua) && /wv/.test(ua) && !/Chrome\/\d/.test(ua);
+  const isIOSWebView = /iPhone|iPad/.test(ua) && !/Safari\//.test(ua) && /AppleWebKit/.test(ua);
+
+  if (matched || isAndroidWebView || isIOSWebView) {
+    const appName = matched ? matched.name : (isAndroidWebView ? '📱 Android WebView' : '📱 iOS WebView');
+
+    // Show the banner immediately — don't even render the login screen
+    document.addEventListener('DOMContentLoaded', function() {
+      const banner = document.getElementById('iab-banner');
+      const badgeEl = document.getElementById('iab-app-name');
+      const urlEl = document.getElementById('iab-url-display');
+      if (banner) banner.classList.add('show');
+      if (badgeEl) badgeEl.textContent = appName;
+      if (urlEl) urlEl.textContent = location.href.replace(/^https?:\/\//, '');
+    });
+  }
+})();
+
+// ── REQUEST ACCESS ──
+function toggleRequestAccessForm() {
+  const form = document.getElementById('request-access-form');
+  form.classList.toggle('open');
+  if (form.classList.contains('open')) {
+    document.getElementById('req-email').focus();
+    document.getElementById('req-status').className = 'req-status';
+  }
+}
+
+async function submitAccessRequest() {
+  const emailInput = document.getElementById('req-email');
+  const statusEl   = document.getElementById('req-status');
+  const submitBtn  = document.getElementById('req-submit-btn');
+  const email      = emailInput.value.trim().toLowerCase();
+
+  // Basic email format validation
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    statusEl.className = 'req-status error';
+    statusEl.textContent = 'Please enter a valid email address.';
+    return;
+  }
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Checking...';
+  statusEl.className = 'req-status';
+
+  try {
+    // Check if email already exists in sheet (unauthenticated public call)
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'checkEmail', email })
+    });
+    const data = await res.json();
+
+    if (data.exists) {
+      statusEl.className = 'req-status info';
+      statusEl.textContent = '✅ You already have access! Click “Continue with Google” above to sign in.';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send Request';
+      return;
+    }
+
+    // Not in sheet — send email to admin (always, ignoring emailNotifications global setting)
+    submitBtn.textContent = 'Sending...';
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: 'your-admin@gmail.com',             // ← Your inbox for access requests
+      to_name:  'Karthick',
+      subject:  'SplitMate — Access Request from ' + email,
+      message:  'Hi Karthick,\n\n' + email + ' has requested access to SplitMate.\n\nTo grant access, add their email to the Members tab in your Google Sheet.\n\nApp: ' + APP_URL + '\n\nThanks,\nSplitMate',
+      app_url:  APP_URL
+    });
+
+    statusEl.className = 'req-status success';
+    statusEl.textContent = '✉️ Access request sent! The admin will add you shortly. You\'ll be able to sign in once approved.';
+    emailInput.value = '';
+  } catch(e) {
+    statusEl.className = 'req-status error';
+    statusEl.textContent = 'Something went wrong. Please try again later.';
+    console.error('Access request error:', e);
+  }
+
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Send Request';
+}
+
+function copyAppUrl() {
+  const url = location.href;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = document.getElementById('iab-copy-btn');
+      if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.textContent = '📋 Copy Link'; }, 2000); }
+    }).catch(() => fallbackCopy(url));
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function fallbackCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try {
+    document.execCommand('copy');
+    const btn = document.getElementById('iab-copy-btn');
+    if (btn) { btn.textContent = '✅ Copied!'; setTimeout(() => { btn.textContent = '📋 Copy Link'; }, 2000); }
+  } catch(e) {}
+  document.body.removeChild(ta);
+}
+
+// ════════════════════════════════════════════════════════════
+//  ⚙️  CONFIGURATION — UPDATE THESE VALUES
+// ════════════════════════════════════════════════════════════
+const CLIENT_ID = 'YOUR_GOOGLE_OAUTH_CLIENT_ID';           // ← Paste your OAuth 2.0 Client ID
+// No ALLOWED_EMAILS here — access is controlled by the Members tab in the Google Sheet.
+// Add a member's email in the Sheet → Settings → Members to grant them access.
+const ADMIN_EMAILS = [                               // ← Admin emails (can manage sheet config)
+  'your-admin@gmail.com'                             // ← Replace with your email
+];
+// Identity-only scope — all sheet ops go through Apps Script (no spreadsheets permission needed)
+const SCOPES = 'openid email profile';
+// Apps Script Web App URL — paste here after deploying Code.gs
+// Deploy → New deployment → Web App → Execute as: Me → Access: Anyone
+const SCRIPT_URL = 'YOUR_APPS_SCRIPT_WEB_APP_URL';         // ← Paste your /exec URL here
+
+// ── CENTRALISED SHEET ID ──
+// This is NOT a secret — access is controlled by Google OAuth.
+// Admin sets this once here. All members get it automatically from the app.
+// Members NEVER need to enter or know the Sheet ID manually.
+const SHEET_ID = 'YOUR_GOOGLE_SHEET_ID';                   // ← Admin: paste your Sheet ID here
+
+// ── EMAILJS CONFIG ──
+const EMAILJS_SERVICE_ID  = 'YOUR_EMAILJS_SERVICE_ID';     // ← From emailjs.com dashboard
+const EMAILJS_TEMPLATE_ID = 'YOUR_EMAILJS_TEMPLATE_ID';   // ← From emailjs.com dashboard
+const EMAILJS_PUBLIC_KEY  = 'YOUR_EMAILJS_PUBLIC_KEY';     // ← From emailjs.com dashboard
+const APP_URL             = 'https://your-app.netlify.app'; // ← Your deployed app URL
+// ════════════════════════════════════════════════════════════
+
+// ── APP STATE ──
+// sheetId is always driven by the SHEET_ID constant above.
+// localStorage is only used for role caching (admin/user) — never for config.
+// All config (members, trips, activeTrip) is ALWAYS loaded fresh from the Sheet.
+let state = {
+  user: null,
+  token: null,
+  idToken: null,               // Google ID token — sent to Apps Script for verification
+  nonce: null,                 // OAuth nonce — verified inside Apps Script
+  sheetId: SHEET_ID,           // always from the constant — same for everyone
+  members: [],                  // always loaded from Sheet — never from localStorage
+  memberEmails: {},             // always loaded from Sheet — never from localStorage
+  trips: [],                    // always loaded from Sheet — never from localStorage
+  expenses: [],
+  settlements: [],
+  activeTrip: 'all',            // loaded from Sheet Settings tab on every sync
+  splitType: 'equal',
+  currentEditId: null,
+  currentSettlePair: null,
+  settleType: 'full',
+  emailNotifications: true,
+  isAdmin: false
+};
+
+const CURRENCIES = { INR: '₹', USD: '$', EUR: '€', GBP: '£', JPY: '¥', AED: 'AED ', SGD: 'S$', THB: '฿' };
+const CAT_COLORS = {
+  '🍽️ Food & Drinks': '#fa6d8a',
+  '🚗 Transport': '#7c6dfa',
+  '🏨 Accommodation': '#6dfabc',
+  '🎉 Activities': '#fabc6d',
+  '🛒 Shopping': '#fa9d6d',
+  '💊 Health': '#6db8fa',
+  '📦 Other': '#a0a0c0'
+};
+
+// ── THEME ──
+function initTheme() {
+  const saved = localStorage.getItem('sm_theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const theme = saved || (prefersDark ? 'dark' : 'light');
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+  updateThemeBtns();
+}
+function toggleTheme() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const newTheme = isLight ? 'dark' : 'light';
+  if (isLight) {
+    document.documentElement.removeAttribute('data-theme');
+    localStorage.setItem('sm_theme', 'dark');
+  } else {
+    document.documentElement.setAttribute('data-theme', 'light');
+    localStorage.setItem('sm_theme', 'light');
+  }
+  updateThemeBtns();
+  // Persist to sheet (fire-and-forget)
+  if (state.idToken) {
+    scriptRequest('saveUserSetting', { key: 'theme', value: newTheme }).catch(() => {});
+  }
+}
+function updateThemeBtns() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const label = isLight ? '🌙 Dark mode' : '☀️ Light mode';
+  const desktopBtn = document.getElementById('theme-toggle-btn');
+  const mobBtn = document.getElementById('mob-theme-btn');
+  if (desktopBtn) desktopBtn.textContent = label;
+  if (mobBtn) mobBtn.textContent = label;
+}
+
+// ── GOOGLE SIGN IN ──
+function handleGoogleSignIn() {
+  // Generate nonce to prevent id_token replay attacks
+  const nonce = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+  sessionStorage.setItem('sm_nonce', nonce);
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    redirect_uri: APP_URL,
+    response_type: 'id_token token',
+    scope: SCOPES,
+    prompt: 'select_account',
+    nonce
+  });
+  location.href = 'https://accounts.google.com/o/oauth2/auth?' + params;
+}
+
+// ── AUTH CALLBACK ──
+// Parse the token immediately when the script loads — before anything else.
+// This is critical: on mobile, window.onload fires late and the hash can be
+// lost if the page starts rendering. We capture it here at script parse time.
+(function captureOAuthToken() {
+  try {
+    const raw = location.hash || window.location.hash || '';
+    if (!raw || raw.length < 2) return;
+    // Manual parse — URLSearchParams breaks when values contain "://"
+    const params = {};
+    raw.slice(1).split('&').forEach(function(part) {
+      const eq = part.indexOf('=');
+      if (eq === -1) return;
+      params[part.substring(0, eq)] = decodeURIComponent(part.substring(eq + 1).replace(/\+/g, ' '));
+    });
+    const token   = params['access_token'];
+    const idToken = params['id_token'];
+    const err     = params['error'];
+    if (token) {
+      window.__sm_pending_token    = token;
+      window.__sm_pending_id_token = idToken || null;
+      // Persist so page refresh doesn't log out
+      sessionStorage.setItem('sm_token',    token);
+      sessionStorage.setItem('sm_id_token', idToken || '');
+      // sm_nonce was set before the redirect — keep it for verification
+    } else if (err) {
+      window.__sm_oauth_error      = err;
+      window.__sm_oauth_error_desc = params['error_description'] || err;
+    }
+  } catch(e) { console.warn('Token capture error:', e); }
+})();
+
+window.onload = function() {
+  initTheme();
+  // Init EmailJS early so request-access works before sign-in
+  emailjs.init(EMAILJS_PUBLIC_KEY);
+  // Clean hash from URL
+  if (window.__sm_pending_token || window.__sm_oauth_error) {
+    history.replaceState({}, '', location.pathname);
+  }
+
+  if (window.__sm_pending_token) {
+    // Fresh login — came back from Google OAuth redirect
+    const token   = window.__sm_pending_token;
+    const idToken = window.__sm_pending_id_token || null;
+    window.__sm_pending_token    = null;
+    window.__sm_pending_id_token = null;
+    if (!token || token.length < 10) {
+      showToast('Sign-in failed: invalid token. Please try again.', 'error');
+      return;
+    }
+    state.token   = token;
+    state.idToken = idToken;
+    state.nonce   = sessionStorage.getItem('sm_nonce') || null;
+    fetchUserInfo(token, idToken);
+
+  } else if (window.__sm_oauth_error) {
+    // OAuth returned an error
+    const raw     = window.__sm_oauth_error;
+    const desc    = window.__sm_oauth_error_desc || raw;
+    const decoded = decodeURIComponent(desc.replace(/\+/g, ' '));
+    let msg = decoded;
+    if (raw === 'redirect_uri_mismatch') msg = '⚙️ URL not registered in Google Cloud Console.';
+    else if (raw === 'access_denied')    msg = '🚫 Access denied by Google.';
+    showToast('Sign-in failed: ' + msg, 'error');
+
+  } else {
+    // No OAuth redirect — check if we have a saved session from before refresh
+    const savedToken   = sessionStorage.getItem('sm_token');
+    const savedIdToken = sessionStorage.getItem('sm_id_token') || null;
+    const savedUser    = sessionStorage.getItem('sm_user');
+    if (savedToken && savedToken.length > 10) {
+      state.token   = savedToken;
+      state.idToken = savedIdToken;
+      state.nonce   = sessionStorage.getItem('sm_nonce') || null;
+      if (savedUser) {
+        // Restore user from session — skip API call entirely
+        try {
+          state.user = JSON.parse(savedUser);
+          const isAdmin = ADMIN_EMAILS.map(e => e.toLowerCase()).includes(state.user.email.toLowerCase());
+          state.isAdmin = isAdmin;
+          enterApp();
+          return;
+        } catch(e) { /* fall through to re-auth */ }
+      }
+      // Token present but no cached user — decode id_token or call API
+      fetchUserInfo(savedToken, savedIdToken);
+    }
+    // else: no session, stay on login screen
+  }
+};
+
+async function fetchUserInfo(token, idToken) {
+  try {
+    if (!token || token.trim().length < 10) {
+      showToast('Sign-in error: no valid token. Please try again.', 'error');
+      return;
+    }
+
+    let user = null;
+
+    // ── PRIMARY: decode id_token JWT locally — no API call, works in Brave ──
+    if (idToken) {
+      try {
+        const parts = idToken.split('.');
+        if (parts.length === 3) {
+          // Base64url decode the payload (middle part)
+          let payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+          while (payload.length % 4) payload += '=';
+          const decoded = JSON.parse(atob(payload));
+          if (decoded.email) {
+            user = {
+              email: decoded.email,
+              name: decoded.name || decoded.email.split('@')[0],
+              picture: decoded.picture || ''
+            };
+          }
+        }
+      } catch(e) { console.warn('id_token decode failed, falling back to userinfo API', e); }
+    }
+
+    // ── FALLBACK: call userinfo API if no id_token (may be blocked by Brave shields) ──
+    if (!user) {
+      const res = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+        headers: { Authorization: 'Bearer ' + token.trim() }
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error?.message || errData.error || ('HTTP ' + res.status);
+        // Give a more helpful error if it looks like a Brave/browser blocking issue
+        if (res.status === 401) {
+          showToast('Auth blocked — if using Brave, disable Shields for this site and try again.', 'error');
+        } else {
+          showToast('Google auth error: ' + errMsg, 'error');
+        }
+        return;
+      }
+      user = await res.json();
+    }
+
+    if (!user?.email) {
+      showToast('Could not read your Google email. Please try again.', 'error');
+      return;
+    }
+    // Access control is enforced by the Apps Script (reads Members sheet live).
+    // No frontend allowlist needed — unauthorized users get an error on first sync.
+
+    // ── ROLE DETECTION ──
+    const isAdmin = ADMIN_EMAILS.map(e => e.toLowerCase()).includes(user.email.toLowerCase());
+    localStorage.setItem('sm_role', isAdmin ? 'admin' : 'user');
+    state.isAdmin = isAdmin;
+    state.user = user;
+    sessionStorage.setItem('sm_user', JSON.stringify(user));
+    await enterApp();
+
+  } catch(e) {
+    showToast('Sign-in failed: ' + (e.message || String(e)), 'error');
+    console.error('fetchUserInfo error:', e);
+  }
+}
+
+async function enterApp() {
+  emailjs.init(EMAILJS_PUBLIC_KEY);
+
+  const u = state.user;
+
+  // ── SHOW VERIFYING STATE ON LOGIN SCREEN ──
+  const signInBtn = document.getElementById('google-signin-btn');
+  if (signInBtn) { signInBtn.disabled = true; signInBtn.textContent = 'Verifying access…'; }
+
+  // ── ACCESS VALIDATION (before showing app) ──
+  if (!state.sheetId) {
+    if (!state.isAdmin) {
+      // Member with no sheet configured — cannot proceed
+      if (signInBtn) { signInBtn.disabled = false; signInBtn.textContent = 'Sign in with Google'; }
+      showToast('⚠️ App not configured yet — ask your admin to set up the Sheet.', 'error');
+      return;
+    }
+    // Admin with no sheet — let through with a warning (they need to paste Sheet ID)
+  } else if (!state.isAdmin) {
+    // Member: verify against the Members tab before revealing anything
+    try {
+      const d = await scriptRequest('getAll');
+      state.expenses     = d.expenses || [];
+      state.members      = (d.members || []).map(m => m.name);
+      state.memberEmails = {};
+      (d.members || []).forEach(m => { if (m.email) state.memberEmails[m.name] = m.email; });
+      state.trips        = d.trips || [];
+      state.settlements  = d.settlements || [];
+      state.activeTrip   = d.activeTrip || 'all';
+      state.emailNotifications = d.emailNotif !== false;
+      // Apply per-user theme from sheet
+      if (d.theme) {
+        if (d.theme === 'light') { document.documentElement.setAttribute('data-theme', 'light'); }
+        else { document.documentElement.removeAttribute('data-theme'); }
+        localStorage.setItem('sm_theme', d.theme);
+        updateThemeBtns();
+      }
+    } catch(e) {
+      // Access denied — stay on login screen, clear session
+      sessionStorage.clear();
+      state.token = null; state.idToken = null; state.user = null;
+      if (signInBtn) { signInBtn.disabled = false; signInBtn.textContent = 'Sign in with Google'; }
+      showToast('⛔ Access denied: ' + (u.email || '') + ' — ask admin to add your email to the Members tab.', 'error');
+      return;
+    }
+  } else {
+    // Admin: sync sheet
+    await syncFromSheet();
+  }
+
+  // ── ALL CHECKS PASSED — NOW REVEAL THE APP ──
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('main-app').classList.add('active');
+
+  // Show admin sheet-ID warning after app is visible
+  if (!state.sheetId && state.isAdmin) {
+    showToast('⚠️ Please paste your Sheet ID in Settings to get started.', 'error');
+  }
+
+  // ── USER DISPLAY ──
+  document.getElementById('user-email').textContent = u.email || '';
+  document.getElementById('user-avatar').textContent = (u.name || u.email || '?')[0].toUpperCase();
+  const mobAv = document.getElementById('mob-avatar');
+  if (mobAv) mobAv.textContent = (u.name || u.email || '?')[0].toUpperCase();
+  const mobMenuName = document.getElementById('mob-menu-name');
+  if (mobMenuName) mobMenuName.textContent = u.name || u.email || '';
+
+  // Role badge
+  const roleTag = state.isAdmin
+    ? ' <span style="font-size:10px;padding:2px 6px;border-radius:10px;background:rgba(124,109,250,0.2);color:var(--accent);border:1px solid rgba(124,109,250,0.3)">Admin</span>'
+    : ' <span style="font-size:10px;padding:2px 6px;border-radius:10px;background:rgba(109,250,188,0.15);color:var(--accent3);border:1px solid rgba(109,250,188,0.25)">Member</span>';
+  const nameEl = document.getElementById('user-name');
+  if (nameEl) nameEl.innerHTML = (u.name || u.email) + roleTag;
+
+  // ── ROLE-BASED NAV & SETTINGS PANEL ──
+  const navSection = document.getElementById('nav-section-settings');
+  if (navSection) navSection.style.display = state.isAdmin ? '' : 'none';
+
+  const adminPanel = document.getElementById('settings-admin');
+  const memberPanel = document.getElementById('settings-member');
+  if (state.isAdmin) {
+    if (adminPanel) adminPanel.style.display = '';
+    if (memberPanel) memberPanel.style.display = 'none';
+    const sheetInput = document.getElementById('sheet-id-input');
+    if (sheetInput) sheetInput.value = state.sheetId;
+  } else {
+    if (adminPanel) adminPanel.style.display = 'none';
+    if (memberPanel) memberPanel.style.display = '';
+    const memEmailEl = document.getElementById('member-email-display');
+    if (memEmailEl) memEmailEl.textContent = u.email || '';
+  }
+
+  setTodayDate();
+  refreshTripSelects();
+  renderMembersList();
+  renderTripsList();
+  populatePaidBySelect();
+  rebuildSplitSection();
+  renderDashboard();
+  renderHistory();
+  renderSummary();
+  populateAdminActiveTripSelect();
+  // Hide New Trip button for non-admins
+  const ntBtn = document.getElementById('new-trip-btn');
+  if (ntBtn) ntBtn.style.display = state.isAdmin ? '' : 'none';
+  // Refresh member active-trip display
+  const matd = document.getElementById('member-active-trip-display');
+  if (matd) matd.textContent = state.activeTrip === 'all' ? 'All trips' : (state.activeTrip || '—');
+  // Sync notification toggle to whatever was loaded from the sheet
+  const notifToggle = document.getElementById('email-notif-toggle-admin');
+  if (notifToggle) notifToggle.checked = state.emailNotifications;
+  // Update member read-only status
+  const mns = document.getElementById('member-notif-status');
+  const mnt = document.getElementById('member-notif-tag');
+  if (mns) mns.textContent = state.emailNotifications ? 'Enabled — emails sent on settlements & reminders' : 'Disabled — no emails will be sent';
+  if (mnt) { mnt.textContent = state.emailNotifications ? 'Enabled' : 'Disabled'; mnt.style.cssText = state.emailNotifications ? 'background:rgba(109,250,188,0.15);color:var(--accent3);border-color:rgba(109,250,188,0.3)' : ''; }
+}
+
+function toggleMobMenu() {
+  const menu = document.getElementById('mob-menu');
+  if (!menu) return;
+  menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
+}
+// Close mobile menu when tapping outside
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('mob-menu');
+  const avatar = document.getElementById('mob-avatar');
+  if (menu && !menu.contains(e.target) && e.target !== avatar) {
+    menu.style.display = 'none';
+  }
+});
+
+function handleSignOut() {
+  sessionStorage.removeItem('sm_token');
+  sessionStorage.removeItem('sm_id_token');
+  sessionStorage.removeItem('sm_user');
+  sessionStorage.removeItem('sm_nonce');
+  localStorage.removeItem('sm_role');
+  location.reload();
+}
+
+// ── NAVIGATION ──
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.m-nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  // sidebar
+  document.querySelectorAll('.nav-btn').forEach(b => { if (b.getAttribute('onclick')?.includes(id)) b.classList.add('active'); });
+  // mobile bottom nav
+  const mBtn = document.getElementById('mnav-' + id);
+  if (mBtn) mBtn.classList.add('active');
+  if (id === 'dashboard') renderDashboard();
+  if (id === 'summary') renderSummary();
+  if (id === 'history') renderHistory();
+  if (id === 'add') { populatePaidBySelect(); rebuildSplitSection(); refreshTripSelects(); }
+  if (id === 'settings') {
+    populateAdminActiveTripSelect();
+    const matd = document.getElementById('member-active-trip-display');
+    if (matd) matd.textContent = state.activeTrip === 'all' ? 'All trips' : (state.activeTrip || '—');
+  }
+  // scroll to top on mobile
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ── APPS SCRIPT API (members — id_token verified server-side, no spreadsheets scope needed) ──
+async function scriptRequest(action, data) {
+  if (!SCRIPT_URL) throw new Error('Apps Script URL not configured. Ask admin to set SCRIPT_URL in index.html.');
+  if (!state.idToken) throw new Error('No ID token available. Please sign out and sign in again.');
+  const body = Object.assign({ action, idToken: state.idToken, nonce: state.nonce || '' }, data || {});
+  // Use text/plain to avoid CORS preflight — Apps Script doesn't support OPTIONS
+  const res = await fetch(SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error('Apps Script error: HTTP ' + res.status);
+  const json = await res.json();
+  if (json.error) throw new Error(json.error);
+  return json;
+}
+
+async function initSheet() {
+  if (!state.sheetId) return;
+  try {
+    await scriptRequest('initSheet');
+    showToast('Sheet connected successfully!', 'success');
+  } catch(e) { showToast('Sheet error: ' + e.message, 'error'); }
+}
+
+async function syncFromSheet() {
+  if (!state.sheetId) return;
+  try {
+    // All roles go through Apps Script — script runs as admin and handles auth
+    const d = await scriptRequest('getAll');
+    state.expenses    = d.expenses || [];
+    state.members     = (d.members || []).map(m => m.name);
+    state.memberEmails = {};
+    (d.members || []).forEach(m => { if (m.email) state.memberEmails[m.name] = m.email; });
+    state.trips       = d.trips || [];
+    state.settlements = d.settlements || [];
+    state.activeTrip  = d.activeTrip || 'all';
+    state.emailNotifications = d.emailNotif !== false;
+    // Apply per-user theme from sheet
+    if (d.theme) {
+      if (d.theme === 'light') { document.documentElement.setAttribute('data-theme', 'light'); }
+      else { document.documentElement.removeAttribute('data-theme'); }
+      localStorage.setItem('sm_theme', d.theme);
+      updateThemeBtns();
+    }
+
+    // Apply active trip to all filter selects
+    refreshTripSelects();
+    ['trip-filter','trip-filter-summary','hist-trip'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = state.activeTrip;
+    });
+    renderTripPills(); // re-render pills with correct active state after select values are set
+    const matd = document.getElementById('member-active-trip-display');
+    if (matd) matd.textContent = state.activeTrip === 'all' ? 'All trips' : state.activeTrip;
+    populatePaidBySelect();
+    renderMembersList();
+    renderTripsList();
+    populateAdminActiveTripSelect();
+    renderDashboard(); renderHistory(); renderSummary();
+    rebuildSplitSection();
+    showToast('Synced from Google Sheets ✓', 'success');
+  } catch(e) {
+    if (e.message && e.message.startsWith('Not authorized')) {
+      showToast('⛔ Access denied: ' + (state.user?.email || '') + ' — ask admin to add your email to the Members tab in the Sheet.', 'error');
+    } else {
+      showToast('Sync error: ' + e.message, 'error');
+    }
+  }
+}
+
+function tryParse(s) { try { return JSON.parse(s); } catch { return {}; } }
+
+async function appendToSheet(expense) {
+  await scriptRequest('addExpense', { expense });
+}
+
+async function updateInSheet(expense) {
+  await scriptRequest('updateExpense', { expense });
+}
+
+async function deleteFromSheet(id) {
+  await scriptRequest('deleteExpense', { id });
+}
+
+// ── PERSIST ACTIVE TRIP IN SHEET ──
+async function persistActiveTrip(tripValue) {
+  state.activeTrip = tripValue;
+  if (!state.sheetId || !state.isAdmin) return;
+  try { await scriptRequest('persistActiveTrip', { tripValue }); } catch(e) { /* silently fail */ }
+}
+
+async function appendSettlementToSheet(s) {
+  if (!state.sheetId) return;
+  await scriptRequest('addSettlement', { settlement: s });
+}
+function saveSheetId() {
+  if (!state.isAdmin) return; // only admin can do this
+  const val = document.getElementById('sheet-id-input').value.trim();
+  if (!val) { showToast('Please enter a Sheet ID', 'error'); return; }
+  state.sheetId = val;
+  // Note: this updates the runtime state only.
+  // To make it permanent for all users, update the SHEET_ID constant in the code and redeploy.
+  showToast('Sheet ID set for this session. Update SHEET_ID in the code to make it permanent for all users.', 'success');
+  initSheet().then(() => syncFromSheet());
+}
+
+async function testSheetConnection() {
+  if (!state.sheetId) { showToast('No Sheet ID set', 'error'); return; }
+  try {
+    await scriptRequest('getAll');
+    document.getElementById('sheet-status').innerHTML = '<span style="color:var(--accent3)">✓ Connected successfully</span>';
+    showToast('Sheet connected!', 'success');
+  } catch(e) { document.getElementById('sheet-status').innerHTML = '<span style="color:var(--accent2)">✗ ' + e.message + '</span>'; }
+}
+
+function openSheetInDrive() {
+  if (state.sheetId) window.open('https://docs.google.com/spreadsheets/d/' + state.sheetId, '_blank');
+}
+
+function addMember() {
+  const name  = document.getElementById('new-member-name').value.trim();
+  const email = document.getElementById('new-member-email').value.trim();
+  const errEl = document.getElementById('member-add-err');
+  if (errEl) errEl.style.display = 'none';
+  if (!name) { if (errEl) { errEl.textContent = 'Please enter a name.'; errEl.style.display = ''; } return; }
+  if (!email) { if (errEl) { errEl.textContent = 'Email is required — without it the member cannot log in.'; errEl.style.display = ''; } return; }
+  if (!email.includes('@')) { if (errEl) { errEl.textContent = 'Please enter a valid email address.'; errEl.style.display = ''; } return; }
+  if (!state.members.includes(name)) {
+    state.members.push(name);
+  }
+  state.memberEmails[name] = email;
+  renderMembersList(); populatePaidBySelect(); rebuildSplitSection();
+  document.getElementById('new-member-name').value = '';
+  document.getElementById('new-member-email').value = '';
+}
+
+function getMemberNetBalance(name) {
+  // Compute this member's net position directly (positive = group owes them, negative = they owe group)
+  let bal = 0;
+  state.expenses.forEach(exp => {
+    if (exp.paidBy === name) bal += exp.amount;
+    if (exp.splits && exp.splits[name]) bal -= exp.splits[name];
+  });
+  // Factor in recorded settlements
+  state.settlements.forEach(s => {
+    if (s.from === name) bal += s.amount;  // they paid out — debt reduced
+    if (s.to === name)   bal -= s.amount;  // they received — credit reduced
+  });
+  return bal;
+}
+
+function removeMember(name) {
+  const bal = getMemberNetBalance(name);
+  if (Math.abs(bal) > 0.01) {
+    const amt = Math.abs(bal).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+    const msg = bal < 0
+      ? `${name} still owes ₹${amt} to the group.`
+      : `The group still owes ₹${amt} to ${name}.`;
+    showToast(`⚠️ Cannot remove ${name} — ${msg} Please settle the balance before removing.`, 'error');
+    return;
+  }
+  if (!confirm(`Remove ${name} from the group?`)) return;
+  state.members = state.members.filter(m => m !== name);
+  renderMembersList(); populatePaidBySelect(); rebuildSplitSection();
+}
+
+function renderMembersList() {
+  // Admin editable list
+  const el = document.getElementById('members-list');
+  if (el) {
+    el.innerHTML = state.members.map(m => {
+      const em = state.memberEmails[m] ? `<span style="font-size:11px;color:var(--muted);margin-left:4px">${state.memberEmails[m]}</span>` : '';
+      return `<div class="member-pill"><span>${m}</span>${em}<button class="remove" onclick="removeMember('${m}')">×</button></div>`;
+    }).join('');
+  }
+  // Member read-only list
+  const ro = document.getElementById('members-list-readonly');
+  if (ro) {
+    ro.innerHTML = state.members.length
+      ? state.members.map(m => `<div class="member-pill"><span>${m}</span></div>`).join('')
+      : '<span style="font-size:13px;color:var(--muted)">No members yet — waiting for admin to configure</span>';
+  }
+}
+
+async function saveEmailNotifPref(checked) {
+  if (!state.isAdmin) return;
+  state.emailNotifications = checked;
+  const notifToggle = document.getElementById('email-notif-toggle-admin');
+  if (notifToggle) notifToggle.checked = checked;
+  try {
+    await scriptRequest('saveAppSetting', { key: 'emailNotif', value: String(checked) });
+    showToast(checked ? '🔔 Email notifications enabled for everyone' : '🔕 Email notifications disabled for everyone', 'success');
+  } catch(e) {
+    showToast('Could not save preference: ' + e.message, 'error');
+  }
+}
+
+async function saveMembers() {
+  if (state.sheetId) {
+    const members = state.members.map(m => ({ name: m, email: state.memberEmails[m] || '' }));
+    await scriptRequest('saveMembers', { members });
+  }
+  populatePaidBySelect();
+  rebuildSplitSection();
+  renderMembersList();
+  showToast('Members saved to Sheet ✓', 'success');
+}
+
+function addTrip() {
+  const name = document.getElementById('new-trip-name').value.trim();
+  if (!name || state.trips.includes(name)) return;
+  state.trips.push(name);
+  renderTripsList(); refreshTripSelects(); populateAdminActiveTripSelect();
+  document.getElementById('new-trip-name').value = '';
+}
+
+function removeTrip(name) {
+  if (name === 'General') return;
+  state.trips = state.trips.filter(t => t !== name);
+  renderTripsList(); refreshTripSelects(); populateAdminActiveTripSelect();
+}
+
+function renderTripsList() {
+  // Admin editable list
+  const el = document.getElementById('trips-list');
+  if (el) {
+    el.innerHTML = state.trips.map(t =>
+      `<div class="member-pill"><span>✈️ ${t}</span>${t !== 'General' ? `<button class="remove" onclick="removeTrip('${t}')">×</button>` : ''}</div>`
+    ).join('');
+  }
+  // Member read-only list
+  const ro = document.getElementById('trips-list-readonly');
+  if (ro) {
+    ro.innerHTML = state.trips.length
+      ? state.trips.map(t => `<div class="member-pill"><span>✈️ ${t}</span></div>`).join('')
+      : '<span style="font-size:13px;color:var(--muted)">No trips yet — waiting for admin to configure</span>';
+  }
+}
+
+async function saveTrips() {
+  if (state.sheetId) {
+    await scriptRequest('saveTrips', { trips: state.trips });
+  }
+  showToast('Trips saved to Sheet ✓', 'success');
+}
+
+// ── ADMIN: set active trip for all users ──
+function populateAdminActiveTripSelect() {
+  const el = document.getElementById('admin-active-trip');
+  if (!el) return;
+  const cur = state.activeTrip || 'all';
+  el.innerHTML = '<option value="all">All trips</option>' +
+    state.trips.map(t => `<option value="${t}">${t}</option>`).join('');
+  el.value = cur;
+}
+
+async function adminSetActiveTrip() {
+  const val = document.getElementById('admin-active-trip')?.value || 'all';
+  await persistActiveTrip(val);
+  // Sync all filter selects to match
+  ['trip-filter','trip-filter-summary','hist-trip'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = val;
+  });
+  renderDashboard(); renderSummary(); renderHistory();
+  showToast('Active trip updated for everyone ✓', 'success');
+}
+
+function refreshTripSelects() {
+  const selects = ['trip-filter', 'trip-filter-summary', 'hist-trip', 'exp-trip'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const cur = el.value;
+    const isFilter = ['trip-filter','trip-filter-summary','hist-trip'].includes(id);
+    el.innerHTML = (isFilter ? '<option value="all">All trips</option>' : '') +
+      state.trips.map(t => `<option value="${t}">${t}</option>`).join('');
+    // Filters use activeTrip; expense form also defaults to activeTrip (not first trip)
+    if (isFilter) el.value = state.activeTrip || cur || 'all';
+    else el.value = (state.activeTrip && state.activeTrip !== 'all' ? state.activeTrip : null) || cur || state.trips[0];
+  });
+  populateAdminActiveTripSelect();
+  renderTripPills();
+}
+
+function renderTripPills() {
+  const container = document.getElementById('trip-pills');
+  if (!container) return;
+  // Show All Trips + last 3 trips (most recently added = end of array)
+  const last3 = state.trips.slice(-3);
+  const options = [{ value: 'all', label: '✦ All Trips' }, ...last3.map(t => ({ value: t, label: t }))];
+  const active = document.getElementById('trip-filter')?.value || state.activeTrip || 'all';
+  container.innerHTML = options.map(o =>
+    `<button class="trip-pill${o.value === active ? ' active' : ''}" data-trip="${o.value.replace(/"/g, '&quot;')}">${o.label}</button>`
+  ).join('');
+  container.querySelectorAll('.trip-pill').forEach(btn => {
+    btn.addEventListener('click', () => selectTripPill(btn.dataset.trip));
+  });
+}
+
+function populatePaidBySelect() {
+  const el = document.getElementById('exp-paidby');
+  if (!el) return;
+  el.innerHTML = '<option value="">Select person</option>' + state.members.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
+// ── ADD EXPENSE ──
+function setTodayDate() {
+  const today = new Date().toISOString().split('T')[0];
+  const el = document.getElementById('exp-date');
+  const mob = document.getElementById('exp-date-mob');
+  if (el) el.value = today;
+  if (mob) mob.value = today;
+}
+
+// ── MOBILE HELPERS ──
+const CURR_SYMS = { INR:'₹', USD:'$', EUR:'€', GBP:'£', JPY:'¥', AED:'AED', SGD:'S$', THB:'฿' };
+
+function updateMobCurrSym() {
+  const cur = document.getElementById('exp-currency')?.value || 'INR';
+  const sym = document.getElementById('mob-curr-sym');
+  if (sym) sym.textContent = CURR_SYMS[cur] || cur;
+}
+
+function setCurrency(code, el) {
+  document.getElementById('exp-currency').value = code;
+  document.querySelectorAll('.curr-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  updateMobCurrSym();
+}
+
+function setCatPill(val, el) {
+  document.getElementById('exp-cat').value = val;
+  const mobCat = document.getElementById('exp-cat-mob');
+  if (mobCat) mobCat.value = val;
+  document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  validateField('cat');
+}
+
+function syncCatPills(val) {
+  document.getElementById('exp-cat').value = val;
+  document.querySelectorAll('.cat-pill').forEach(p => {
+    p.classList.toggle('active', p.getAttribute('onclick')?.includes(val));
+  });
+}
+
+function setSplitType(type) {
+  state.splitType = type;
+  document.querySelectorAll('.split-opt').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('split-equal-section').style.display = type === 'equal' ? '' : 'none';
+  document.getElementById('split-unequal-section').style.display = type === 'unequal' ? '' : 'none';
+  document.getElementById('split-percent-section').style.display = type === 'percent' ? '' : 'none';
+}
+
+function rebuildSplitSection() {
+  // Equal checkboxes
+  const eqEl = document.getElementById('equal-members');
+  if (eqEl) eqEl.innerHTML = state.members.map(m =>
+    `<div class="member-chip selected" id="eq-${sanitize(m)}" onclick="toggleMemberChip(this)">
+      <input type="checkbox" checked onclick="event.stopPropagation()" style="pointer-events:none"> <span>${m}</span></div>`
+  ).join('');
+
+  // Unequal amount inputs
+  const uneqEl = document.getElementById('unequal-inputs');
+  if (uneqEl) uneqEl.innerHTML = state.members.map(m =>
+    `<div class="unequal-row"><label>${m}</label>
+    <input type="number" class="trip-select" id="ueq-${sanitize(m)}" placeholder="0.00" min="0" step="0.01" oninput="updateUnequalTotal()" style="width:90px;padding:6px 10px;font-size:13px"/></div>`
+  ).join('');
+
+  // Percent inputs
+  const pctEl = document.getElementById('percent-inputs');
+  if (pctEl) pctEl.innerHTML = state.members.map(m =>
+    `<div class="unequal-row"><label>${m}</label>
+    <input type="number" class="trip-select" id="pct-${sanitize(m)}" placeholder="0" min="0" max="100" oninput="updatePercentTotal()" style="width:70px;padding:6px 10px;font-size:13px"/></div>`
+  ).join('');
+}
+
+function sanitize(s) { return s.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+function toggleMemberChip(el) {
+  el.classList.toggle('selected');
+  const cb = el.querySelector('input[type=checkbox]');
+  if (cb) cb.checked = el.classList.contains('selected');
+}
+
+function updateUnequalTotal() {
+  const amount = parseFloat(document.getElementById('exp-amount')?.value) || 0;
+  let total = 0;
+  state.members.forEach(m => {
+    const v = parseFloat(document.getElementById('ueq-' + sanitize(m))?.value) || 0;
+    total += v;
+  });
+  const tEl = document.getElementById('unequal-total');
+  const dEl = document.getElementById('unequal-diff');
+  const errEl = document.getElementById('err-split');
+  if (tEl) tEl.textContent = total.toFixed(2);
+  const tgtEl = document.getElementById('unequal-target');
+  if (tgtEl) tgtEl.textContent = amount.toFixed(2);
+
+  const diff = total - amount;
+  if (Math.abs(diff) < 0.01) {
+    if (dEl) { dEl.textContent = '✓'; dEl.style.color = 'var(--accent3)'; }
+    if (errEl) errEl.textContent = '';
+  } else if (diff > 0) {
+    if (dEl) { dEl.textContent = `▲ over by ${diff.toFixed(2)}`; dEl.style.color = 'var(--accent2)'; }
+    if (errEl) errEl.textContent = `⚠️ Split total exceeds expense by ${diff.toFixed(2)} — reduce someone's share.`;
+  } else {
+    if (dEl) { dEl.textContent = `▼ under by ${Math.abs(diff).toFixed(2)}`; dEl.style.color = 'var(--warning)'; }
+    if (errEl) errEl.textContent = '';
+  }
+}
+
+function updatePercentTotal() {
+  let total = 0;
+  state.members.forEach(m => { total += parseFloat(document.getElementById('pct-' + sanitize(m))?.value) || 0; });
+  const el = document.getElementById('percent-total');
+  const dEl = document.getElementById('percent-diff');
+  if (el) el.textContent = total.toFixed(1);
+  if (dEl) dEl.textContent = Math.abs(total - 100) > 0.01 ? `(need 100%)` : '✓';
+}
+
+function getSplits(amount) {
+  const splits = {};
+  if (state.splitType === 'equal') {
+    const included = state.members.filter(m => document.getElementById('eq-' + sanitize(m))?.classList.contains('selected'));
+    if (!included.length) return null;
+    const share = +(amount / included.length).toFixed(2);
+    included.forEach(m => splits[m] = share);
+  } else if (state.splitType === 'unequal') {
+    let total = 0;
+    state.members.forEach(m => {
+      const v = parseFloat(document.getElementById('ueq-' + sanitize(m))?.value) || 0;
+      if (v > 0) { splits[m] = v; total += v; }
+    });
+    // Allow if total matches amount within 1 rupee (handles floating point)
+    if (!Object.keys(splits).length) return null;
+    if (Math.abs(total - amount) > 1.0) return null;
+  } else if (state.splitType === 'percent') {
+    let total = 0;
+    state.members.forEach(m => { total += parseFloat(document.getElementById('pct-' + sanitize(m))?.value) || 0; });
+    if (Math.abs(total - 100) > 0.5) return null;
+    state.members.forEach(m => {
+      const pct = parseFloat(document.getElementById('pct-' + sanitize(m))?.value) || 0;
+      if (pct > 0) splits[m] = +(amount * pct / 100).toFixed(2);
+    });
+  }
+  return splits;
+}
+
+function clearErrors() {
+  ['err-name','err-amount','err-amount-desktop','err-cat','err-cat-mob','err-date','err-date-mob','err-paidby','err-split'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = '';
+  });
+  ['exp-name','exp-amount','exp-amount-desktop','exp-cat','exp-cat-mob','exp-date','exp-date-mob','exp-paidby'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.classList.remove('error');
+  });
+}
+
+function validateExpense() {
+  clearErrors(); let ok = true;
+  const isMob = window.innerWidth <= 768;
+
+  // Sync mobile mirrors into canonical fields
+  const mobDate = document.getElementById('exp-date-mob')?.value;
+  if (mobDate) document.getElementById('exp-date').value = mobDate;
+  const mobCat = document.getElementById('exp-cat-mob')?.value;
+  if (mobCat) document.getElementById('exp-cat').value = mobCat;
+  if (!isMob) {
+    const desktopAmt = document.getElementById('exp-amount-desktop')?.value;
+    if (desktopAmt) document.getElementById('exp-amount').value = desktopAmt;
+  }
+
+  const name   = document.getElementById('exp-name').value.trim();
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const cat    = document.getElementById('exp-cat').value;
+  const paidBy = document.getElementById('exp-paidby').value;
+  const date   = document.getElementById('exp-date').value;
+
+  // Name
+  if (!name) {
+    setErr('err-name', 'Expense name is required'); setErrEl('exp-name'); ok = false;
+  } else if (name.length > 200) {
+    setErr('err-name', 'Name must be 200 characters or less'); setErrEl('exp-name'); ok = false;
+  }
+
+  // Amount
+  if (!amount || amount <= 0) {
+    if (isMob) { setErr('err-amount', 'Enter a valid amount'); setErrEl('exp-amount'); }
+    else       { setErr('err-amount-desktop', 'Enter a valid amount'); setErrEl('exp-amount-desktop'); }
+    ok = false;
+  } else if (amount > 9999999) {
+    if (isMob) { setErr('err-amount', 'Amount is too large (max 9,999,999)'); setErrEl('exp-amount'); }
+    else       { setErr('err-amount-desktop', 'Amount is too large (max 9,999,999)'); setErrEl('exp-amount-desktop'); }
+    ok = false;
+  }
+
+  // Category
+  if (!cat) {
+    if (isMob) { setErr('err-cat-mob', 'Select a category'); setErrEl('exp-cat-mob'); }
+    else       { setErr('err-cat', 'Select a category'); setErrEl('exp-cat'); }
+    ok = false;
+  }
+
+  // Date
+  if (!date) {
+    if (isMob) { setErr('err-date-mob', 'Date is required'); setErrEl('exp-date-mob'); }
+    else       { setErr('err-date', 'Date is required'); setErrEl('exp-date'); }
+    ok = false;
+  } else {
+    const maxDate = new Date(); maxDate.setFullYear(maxDate.getFullYear() + 1);
+    if (new Date(date + 'T00:00:00') > maxDate) {
+      if (isMob) { setErr('err-date-mob', 'Date is too far in the future'); setErrEl('exp-date-mob'); }
+      else       { setErr('err-date', 'Date is too far in the future'); setErrEl('exp-date'); }
+      ok = false;
+    }
+  }
+
+  // Paid By
+  if (!paidBy) { setErr('err-paidby', 'Select who paid'); setErrEl('exp-paidby'); ok = false; }
+
+  return ok;
+}
+
+function setErr(id, msg) { const el = document.getElementById(id); if (el) el.textContent = msg; }
+function setErrEl(id) { const el = document.getElementById(id); if (el) el.classList.add('error'); }
+
+// Real-time per-field validation (called from onblur / onchange handlers)
+function validateField(field) {
+  const isMob = window.innerWidth <= 768;
+
+  if (field === 'name') {
+    const inp = document.getElementById('exp-name');
+    const err = document.getElementById('err-name');
+    const val = inp?.value.trim() || '';
+    if (!val)              { setErr('err-name', 'Expense name is required');          setErrEl('exp-name'); }
+    else if (val.length > 200) { setErr('err-name', 'Name must be 200 characters or less'); setErrEl('exp-name'); }
+    else { if (err) err.textContent = ''; inp?.classList.remove('error'); }
+  }
+
+  if (field === 'amount') {
+    const inp   = isMob ? document.getElementById('exp-amount') : document.getElementById('exp-amount-desktop');
+    const errId = isMob ? 'err-amount' : 'err-amount-desktop';
+    const errEl = document.getElementById(errId);
+    const val   = parseFloat(inp?.value);
+    if (!val || val <= 0)   { setErr(errId, 'Enter a valid amount');                  setErrEl(inp?.id); }
+    else if (val > 9999999) { setErr(errId, 'Amount is too large (max 9,999,999)');  setErrEl(inp?.id); }
+    else { if (errEl) errEl.textContent = ''; inp?.classList.remove('error'); }
+  }
+
+  if (field === 'cat') {
+    const val = document.getElementById('exp-cat').value;
+    if (isMob) {
+      const inp = document.getElementById('exp-cat-mob');
+      const err = document.getElementById('err-cat-mob');
+      if (!val) { setErr('err-cat-mob', 'Select a category'); setErrEl('exp-cat-mob'); }
+      else { if (err) err.textContent = ''; inp?.classList.remove('error'); }
+    } else {
+      const inp = document.getElementById('exp-cat');
+      const err = document.getElementById('err-cat');
+      if (!val) { setErr('err-cat', 'Select a category'); setErrEl('exp-cat'); }
+      else { if (err) err.textContent = ''; inp?.classList.remove('error'); }
+    }
+  }
+
+  if (field === 'date') {
+    const mobVal = document.getElementById('exp-date-mob')?.value;
+    if (mobVal) document.getElementById('exp-date').value = mobVal;
+    const val = document.getElementById('exp-date').value;
+    const maxDate = new Date(); maxDate.setFullYear(maxDate.getFullYear() + 1);
+    const tooFar  = val && new Date(val + 'T00:00:00') > maxDate;
+    if (isMob) {
+      const inp = document.getElementById('exp-date-mob');
+      const err = document.getElementById('err-date-mob');
+      if (!val)         { setErr('err-date-mob', 'Date is required');                 inp?.classList.add('error'); }
+      else if (tooFar)  { setErr('err-date-mob', 'Date is too far in the future');    inp?.classList.add('error'); }
+      else { if (err) err.textContent = ''; inp?.classList.remove('error'); }
+    } else {
+      const inp = document.getElementById('exp-date');
+      const err = document.getElementById('err-date');
+      if (!val)         { setErr('err-date', 'Date is required');                     inp?.classList.add('error'); }
+      else if (tooFar)  { setErr('err-date', 'Date is too far in the future');        inp?.classList.add('error'); }
+      else { if (err) err.textContent = ''; inp?.classList.remove('error'); }
+    }
+  }
+
+  if (field === 'paidby') {
+    const inp = document.getElementById('exp-paidby');
+    const err = document.getElementById('err-paidby');
+    if (!inp?.value) { setErr('err-paidby', 'Select who paid'); setErrEl('exp-paidby'); }
+    else { if (err) err.textContent = ''; inp?.classList.remove('error'); }
+  }
+}
+
+async function submitExpense() {
+  if (!validateExpense()) return;
+  const amount = parseFloat(document.getElementById('exp-amount').value);
+  const splits = getSplits(amount);
+  if (!splits || !Object.keys(splits).length) {
+    if (state.splitType === 'equal') {
+      setErr('err-split', 'Select at least one member.');
+    } else if (state.splitType === 'unequal') {
+      const amount = parseFloat(document.getElementById('exp-amount').value) || 0;
+      let total = 0;
+      state.members.forEach(m => { total += parseFloat(document.getElementById('ueq-' + sanitize(m))?.value) || 0; });
+      const diff = total - amount;
+      if (diff > 0.01) setErr('err-split', `⚠️ Split total is ${diff.toFixed(2)} more than the expense. Reduce someone's share.`);
+      else if (diff < -0.01) setErr('err-split', `⚠️ Split total is ${Math.abs(diff).toFixed(2)} less than the expense. Add the remaining amount.`);
+      else setErr('err-split', 'Enter amounts for at least one member.');
+    } else {
+      setErr('err-split', 'Percentages must total 100%.');
+    }
+    return;
+  }
+
+  const expense = {
+    id: 'exp_' + Date.now(),
+    date: document.getElementById('exp-date').value,
+    name: document.getElementById('exp-name').value.trim(),
+    category: document.getElementById('exp-cat').value,
+    amount, currency: document.getElementById('exp-currency').value,
+    paidBy: document.getElementById('exp-paidby').value,
+    trip: document.getElementById('exp-trip').value,
+    splitType: state.splitType,
+    splits, notes: document.getElementById('exp-notes').value.trim(),
+    addedBy: state.user?.name || ''
+  };
+
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="loading"></span> Saving...';
+
+  try {
+    state.expenses.push(expense);
+    await appendToSheet(expense);
+    showToast('Expense saved! 💾', 'success');
+    resetExpenseForm();
+    // Reset dashboard filter to show all trips so the new expense is always visible
+    const tripFilter = document.getElementById('trip-filter');
+    if (tripFilter) tripFilter.value = 'all';
+    ['trip-filter-summary','hist-trip'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = 'all';
+    });
+    renderDashboard(); renderHistory(); renderSummary();
+  } catch(e) {
+    state.expenses.pop();
+    showToast('Save failed: ' + e.message, 'error');
+  }
+  btn.disabled = false; btn.innerHTML = '💾 Save Expense';
+}
+
+function resetExpenseForm() {
+  ['exp-name','exp-amount','exp-amount-desktop','exp-notes'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  document.getElementById('exp-cat').value = '';
+  document.getElementById('exp-paidby').value = '';
+  document.getElementById('exp-currency').value = 'INR';
+  document.getElementById('exp-trip').value = (state.activeTrip && state.activeTrip !== 'all') ? state.activeTrip : (state.trips[0] || 'General');
+  // mobile mirrors
+  const mobCat = document.getElementById('exp-cat-mob');
+  if (mobCat) mobCat.value = '';
+  document.querySelectorAll('.cat-pill').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.curr-chip').forEach((c,i) => c.classList.toggle('active', i===0));
+  updateMobCurrSym();
+  setTodayDate();
+  clearErrors();
+  rebuildSplitSection();
+}
+
+// ── HISTORY ──
+function renderHistory() {
+  const list = document.getElementById('expense-list');
+  const tripFilter = document.getElementById('hist-trip')?.value || 'all';
+  const catFilter = document.getElementById('hist-cat')?.value || 'all';
+  const search = (document.getElementById('hist-search')?.value || '').toLowerCase();
+
+  const sortBy = document.getElementById('hist-sort')?.value || 'date-desc';
+  let exps = [...state.expenses].sort((a, b) => {
+    if (sortBy === 'date-asc')    return a.date.localeCompare(b.date);
+    if (sortBy === 'amount-desc') return b.amount - a.amount;
+    if (sortBy === 'amount-asc')  return a.amount - b.amount;
+    return b.date.localeCompare(a.date); // date-desc default
+  });
+  if (tripFilter !== 'all') exps = exps.filter(e => e.trip === tripFilter);
+  if (catFilter !== 'all') exps = exps.filter(e => e.category === catFilter);
+  if (search) exps = exps.filter(e => e.name.toLowerCase().includes(search) || e.paidBy.toLowerCase().includes(search));
+
+  if (!exps.length) {
+    list.innerHTML = `<div class="empty"><div class="empty-icon">🧾</div><h3>No expenses yet</h3><p>Add your first expense to get started</p></div>`;
+    return;
+  }
+
+  list.innerHTML = exps.map(e => {
+    const sym = CURRENCIES[e.currency] || e.currency + ' ';
+    const catIcon = e.category?.split(' ')[0] || '📦';
+    const catColor = CAT_COLORS[e.category] || '#a0a0c0';
+    return `<div class="expense-card" onclick="openEditModal('${e.id}')">
+      <div class="cat-icon" style="background:${catColor}22;color:${catColor}">${catIcon}</div>
+      <div class="expense-info">
+        <div class="expense-name">${e.name}</div>
+        <div class="expense-meta">${e.date} · ${e.trip} · <span class="badge ${e.splitType === 'equal' ? 'badge-equal' : 'badge-unequal'}">${e.splitType}</span></div>
+      </div>
+      <div>
+        <div class="expense-amount">${sym}${e.amount.toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2})}</div>
+        <div class="expense-paidby">paid by ${e.paidBy}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── EDIT MODAL ──
+function openEditModal(id) {
+  const exp = state.expenses.find(e => e.id === id);
+  if (!exp) return;
+  state.currentEditId = id;
+  const sym = CURRENCIES[exp.currency] || exp.currency + ' ';
+  const splitInfo = Object.entries(exp.splits).map(([k,v]) => `${k}: ${sym}${v}`).join(', ');
+  document.getElementById('edit-form-content').innerHTML = `
+    <div class="form-row"><div class="field"><label>Name</label><input type="text" id="edit-name" value="${exp.name}"/></div>
+    <div class="field"><label>Amount</label><input type="number" id="edit-amount" value="${exp.amount}" step="0.01"/></div></div>
+    <div class="form-row"><div class="field"><label>Date</label><input type="date" id="edit-date" value="${exp.date}"/></div>
+    <div class="field"><label>Currency</label><select id="edit-currency">${Object.entries(CURRENCIES).map(([c,s])=>`<option value="${c}" ${exp.currency===c?'selected':''}>${s} ${c}</option>`).join('')}</select></div></div>
+    <div class="form-row"><div class="field"><label>Paid By</label><select id="edit-paidby">${state.members.map(m=>`<option value="${m}" ${exp.paidBy===m?'selected':''}>${m}</option>`).join('')}</select></div>
+    <div class="field"><label>Trip</label><select id="edit-trip">${state.trips.map(t=>`<option value="${t}" ${exp.trip===t?'selected':''}>${t}</option>`).join('')}</select></div></div>
+    <div class="form-row full"><div class="field"><label>Notes</label><input type="text" id="edit-notes" value="${exp.notes||''}"/></div></div>
+    <div class="divider"></div>
+    <div class="text-sm text-muted" style="margin-bottom:12px">Split breakdown: ${splitInfo}</div>
+    <div class="flex gap-2">
+      <button class="submit-btn" style="flex:1" onclick="saveEdit()">💾 Save Changes</button>
+      <button class="btn-sm btn-danger" onclick="deleteExpense('${id}')">🗑 Delete</button>
+    </div>`;
+  document.getElementById('edit-modal').style.display = 'flex';
+}
+
+function closeEditModal() { document.getElementById('edit-modal').style.display = 'none'; state.currentEditId = null; }
+
+async function saveEdit() {
+  const id = state.currentEditId;
+  const idx = state.expenses.findIndex(e => e.id === id);
+  if (idx < 0) return;
+  state.expenses[idx] = {
+    ...state.expenses[idx],
+    name: document.getElementById('edit-name').value,
+    amount: parseFloat(document.getElementById('edit-amount').value),
+    date: document.getElementById('edit-date').value,
+    currency: document.getElementById('edit-currency').value,
+    paidBy: document.getElementById('edit-paidby').value,
+    trip: document.getElementById('edit-trip').value,
+    notes: document.getElementById('edit-notes').value
+  };
+  try {
+    await updateInSheet(state.expenses[idx]);
+    showToast('Expense updated ✓', 'success');
+    closeEditModal(); renderDashboard(); renderHistory(); renderSummary();
+  } catch(e) { showToast('Update failed: ' + e.message, 'error'); }
+}
+
+async function deleteExpense(id) {
+  if (!confirm('Delete this expense?')) return;
+  const idx = state.expenses.findIndex(e => e.id === id);
+  if (idx < 0) return;
+  const removed = state.expenses.splice(idx, 1)[0];
+  try {
+    await deleteFromSheet(id);
+    showToast('Expense deleted', 'success');
+    closeEditModal(); renderDashboard(); renderHistory(); renderSummary();
+  } catch(e) {
+    state.expenses.splice(idx, 0, removed);
+    showToast('Delete failed: ' + e.message, 'error');
+  }
+}
+
+// ── SETTLEMENT ALGORITHM ──
+function computeSettlements(expenses) {
+  const balances = {};
+  state.members.forEach(m => balances[m] = 0);
+
+  expenses.forEach(exp => {
+    const payer = exp.paidBy;
+    const splits = exp.splits || {};
+    if (!balances[payer]) balances[payer] = 0;
+    balances[payer] += exp.amount;
+    Object.entries(splits).forEach(([person, share]) => {
+      if (!balances[person]) balances[person] = 0;
+      balances[person] -= share;
+    });
+  });
+
+  // Greedy settlement minimization
+  const debtors = Object.entries(balances).filter(([,v]) => v < -0.01).sort((a,b) => a[1]-b[1]);
+  const creditors = Object.entries(balances).filter(([,v]) => v > 0.01).sort((a,b) => b[1]-a[1]);
+  const transactions = [];
+
+  let di = 0, ci = 0;
+  const d = debtors.map(x => [x[0], -x[1]]); // positive owed amounts
+  const c = creditors.map(x => [...x]);
+
+  while (di < d.length && ci < c.length) {
+    const [debtor, debt] = d[di];
+    const [creditor, credit] = c[ci];
+    const amount = Math.min(debt, credit);
+    transactions.push({ from: debtor, to: creditor, amount: +amount.toFixed(2) });
+    d[di][1] -= amount; c[ci][1] -= amount;
+    if (d[di][1] < 0.01) di++;
+    if (c[ci][1] < 0.01) ci++;
+  }
+  return { transactions, balances };
+}
+
+function renderSummary() {
+  const trip = document.getElementById('trip-filter-summary')?.value || 'all';
+  const expenses = trip === 'all' ? state.expenses : state.expenses.filter(e => e.trip === trip);
+  const el = document.getElementById('settlement-content');
+  if (!expenses.length) { el.innerHTML = `<div class="empty"><div class="empty-icon">⚖️</div><h3>No expenses to settle</h3><p>Add some expenses first</p></div>`; return; }
+
+  const { transactions, balances } = computeSettlementsWithPartials(expenses);
+  const myName = state.user?.name;
+
+  let html = '';
+
+  // Action bar
+  html += `<div class="settle-actions-bar">
+    <label>💡 ${transactions.filter(t=>t.remaining>0.01).length} outstanding payments</label>
+    <button class="btn-sm btn-email" onclick="sendAllReminderEmails()">📧 Send Reminder to All</button>
+    <a href="${APP_URL}/#settlement" target="_blank" style="font-size:12px;color:var(--muted);text-decoration:none">🔗 Share Link</a>
+  </div>`;
+
+  if (!transactions.filter(t=>t.remaining>0.01).length && !state.settlements.length) {
+    html += `<div style="padding:24px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);text-align:center;color:var(--accent3);font-size:16px;margin-bottom:20px">✅ All settled up! No outstanding balances.</div>`;
+  } else {
+    html += `<div class="settlement-grid">`;
+    transactions.forEach(t => {
+      const isMine = t.from === myName || t.to === myName;
+      const isFullySettled = t.remaining <= 0.01;
+      const paidSoFar = t.amount - t.remaining;
+      const settledClass = isFullySettled ? 'is-settled' : '';
+
+      html += `<div class="settle-card ${settledClass}" style="${isMine && !isFullySettled ? 'border-color:rgba(250,109,138,0.3)' : ''}">
+        <div class="settle-people">
+          <strong>${t.from}</strong><span class="arrow">→</span><strong>${t.to}</strong>
+          ${isMine && !isFullySettled ? '<span style="font-size:11px;color:var(--accent2);margin-left:auto">👈 You</span>' : ''}
+          ${isFullySettled ? '<span class="badge-settled" style="margin-left:auto">✓ Settled</span>' : ''}
+        </div>
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <div class="settle-amount" style="color:${isFullySettled?'var(--muted)':'var(--accent2)'}">₹${t.remaining.toLocaleString('en-IN',{minimumFractionDigits:2})}</div>
+          ${paidSoFar > 0.01 ? `<span style="font-size:12px;color:var(--accent3)">+₹${paidSoFar.toFixed(0)} paid</span>` : ''}
+        </div>
+        <div class="settle-note">${t.from} owes ${t.to}</div>
+        ${paidSoFar > 0.01 ? `<div class="progress-bar" style="margin-top:6px"><div class="progress-fill" style="width:${Math.round(paidSoFar/t.amount*100)}%;background:var(--accent3)"></div></div>` : ''}
+        ${!isFullySettled ? `<div class="flex gap-2 mt-2" style="flex-wrap:wrap">
+          <button class="btn-sm btn-primary" style="font-size:12px;padding:6px 12px" onclick="openSettleModal('${t.from}','${t.to}',${t.remaining})">💸 Settle Up</button>
+          <button class="btn-sm btn-email" style="font-size:12px;padding:6px 12px" onclick="sendReminderEmail('${t.from}','${t.to}',${t.remaining})">📧 Remind</button>
+        </div>` : `<div class="flex gap-2 mt-2"><span style="font-size:12px;color:var(--accent3)">✓ Fully settled</span></div>`}
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Balance summary
+  html += `<div class="config-card" style="max-width:100%;margin-top:20px"><h3>📊 Balance Summary</h3><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:8px">`;
+  Object.entries(balances).sort((a,b) => b[1]-a[1]).forEach(([name, bal]) => {
+    const color = bal > 0 ? 'var(--accent3)' : bal < 0 ? 'var(--accent2)' : 'var(--muted)';
+    const label = bal > 0 ? `gets back ₹${bal.toFixed(2)}` : bal < 0 ? `owes ₹${(-bal).toFixed(2)}` : 'settled';
+    const width = Math.min(Math.abs(bal) / (Math.max(...Object.values(balances).map(Math.abs)) || 1) * 100, 100);
+    html += `<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+      <div style="font-size:13px;font-weight:500;margin-bottom:4px">${name}</div>
+      <div style="font-size:12px;color:${color}">${label}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${width}%;background:${color}"></div></div>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  // Settlement history
+  if (state.settlements.length) {
+    html += `<div class="config-card" style="max-width:100%;margin-top:20px"><h3>🕐 Payment History</h3>
+    <div class="partial-list">`;
+    [...state.settlements].reverse().forEach(s => {
+      html += `<div class="partial-item">
+        <span><strong>${s.from}</strong> → <strong>${s.to}</strong> · ₹${s.amount.toFixed(2)} ${s.full ? '<span class="badge-settled">full</span>' : '(partial)'} ${s.note ? `· <em>${s.note}</em>` : ''}</span>
+        <span style="color:var(--muted)">${s.date}</span>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// Compute settlements factoring in partial payments
+function computeSettlementsWithPartials(expenses) {
+  const { transactions, balances } = computeSettlements(expenses);
+
+  // Reduce each transaction's amount by payments already made
+  transactions.forEach(t => {
+    const paid = state.settlements
+      .filter(s => s.from === t.from && s.to === t.to)
+      .reduce((sum, s) => sum + s.amount, 0);
+    t.remaining = Math.max(0, t.amount - paid);
+  });
+
+  // Recompute balances factoring payments
+  const adjBalances = { ...balances };
+  state.settlements.forEach(s => {
+    if (adjBalances[s.from] !== undefined) adjBalances[s.from] += s.amount;
+    if (adjBalances[s.to] !== undefined) adjBalances[s.to] -= s.amount;
+  });
+
+  return { transactions, balances: adjBalances };
+}
+
+// ── SETTLE UP MODAL ──
+function openSettleModal(from, to, remaining) {
+  state.currentSettlePair = { from, to, originalAmount: remaining };
+  state.settleType = 'full';
+  document.getElementById('settle-modal-subtitle').textContent = `Record payment from ${from} to ${to}`;
+  document.getElementById('settle-modal-info').innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;font-size:15px;font-weight:500">
+      <strong>${from}</strong><span class="arrow">→</span><strong>${to}</strong>
+    </div>
+    <div style="margin-top:8px;font-size:22px;font-family:var(--font-head);color:var(--accent2)">₹${remaining.toLocaleString('en-IN',{minimumFractionDigits:2})} outstanding</div>`;
+  document.getElementById('settle-partial-section').style.display = 'none';
+  document.getElementById('settle-partial-input').value = '';
+  document.getElementById('settle-note-input').value = '';
+  document.getElementById('settle-full-btn').classList.add('active');
+  document.getElementById('settle-partial-btn').classList.remove('active');
+  document.getElementById('settle-modal').style.display = 'flex';
+}
+
+function closeSettleModal() {
+  document.getElementById('settle-modal').style.display = 'none';
+  state.currentSettlePair = null;
+}
+
+function setSettleType(type) {
+  state.settleType = type;
+  document.getElementById('settle-full-btn').classList.toggle('active', type === 'full');
+  document.getElementById('settle-partial-btn').classList.toggle('active', type === 'partial');
+  document.getElementById('settle-partial-section').style.display = type === 'partial' ? '' : 'none';
+}
+
+async function confirmSettlement() {
+  const pair = state.currentSettlePair;
+  if (!pair) return;
+
+  let amount = pair.originalAmount;
+  const isFull = state.settleType === 'full';
+  if (!isFull) {
+    amount = parseFloat(document.getElementById('settle-partial-input').value);
+    if (!amount || amount <= 0) { showToast('Enter a valid amount', 'error'); return; }
+    if (amount > pair.originalAmount + 0.01) { showToast('Amount exceeds outstanding balance', 'error'); return; }
+  }
+  const note = document.getElementById('settle-note-input').value.trim();
+
+  const settlement = {
+    id: 'set_' + Date.now(),
+    date: new Date().toISOString().split('T')[0],
+    from: pair.from, to: pair.to,
+    amount: +amount.toFixed(2),
+    full: isFull || Math.abs(amount - pair.originalAmount) < 0.01,
+    note
+  };
+
+  const btn = document.getElementById('settle-confirm-btn');
+  btn.disabled = true; btn.innerHTML = '<span class="loading"></span> Saving...';
+
+  try {
+    state.settlements.push(settlement);
+    await appendSettlementToSheet(settlement);
+
+    // Send settlement email notification
+    await sendSettlementConfirmEmail(settlement);
+
+    showToast(isFull ? '✅ Fully settled!' : `💸 Partial payment of ₹${amount.toFixed(2)} recorded`, 'success');
+    closeSettleModal();
+    renderSummary();
+    // Ensure dashboard trip filter matches summary before re-rendering
+    syncTripFilter(document.getElementById('trip-filter-summary')?.value || 'all');
+    renderDashboard();
+  } catch(e) {
+    state.settlements.pop();
+    showToast('Save failed: ' + e.message, 'error');
+  }
+  btn.disabled = false; btn.innerHTML = 'Confirm Settlement';
+}
+
+// ── EMAIL FUNCTIONS (EmailJS) ──
+function getMemberEmail(name) {
+  return state.memberEmails[name] || null;
+}
+
+function buildSettlementBody(transactions) {
+  return transactions.map(t =>
+    `• ${t.from} owes ${t.to} — ₹${(t.remaining || t.amount).toLocaleString('en-IN',{minimumFractionDigits:2})}`
+  ).join('\n');
+}
+
+async function sendReminderEmail(from, to, remaining) {
+  if (!state.emailNotifications) { showToast('🔕 Email notifications are disabled. Enable them in Settings.', 'error'); return; }
+  const toEmail = getMemberEmail(from);
+  if (!toEmail) {
+    showToast(`No email on file for ${from}. Add it in Settings.`, 'error');
+    return;
+  }
+  const subject = `SplitMate — Payment Reminder`;
+  const message =
+`Hi ${from},
+
+This is a friendly reminder that you have an outstanding payment:
+
+  You owe ${to}: ₹${remaining.toLocaleString('en-IN',{minimumFractionDigits:2})}
+
+You can view the full breakdown and mark it as settled here:
+${APP_URL}/#settlement
+
+Thanks,
+SplitMate`;
+
+  try {
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: toEmail,
+      to_name: from,
+      subject,
+      message,
+      app_url: APP_URL + '/#settlement'
+    });
+    showToast(`Reminder sent to ${from} ✉️`, 'success');
+  } catch(e) {
+    showToast('Email failed: ' + (e.text || e.message || 'Unknown error'), 'error');
+  }
+}
+
+async function sendAllReminderEmails() {
+  if (!state.emailNotifications) { showToast('🔕 Email notifications are disabled. Enable them in Settings.', 'error'); return; }
+  const trip = document.getElementById('trip-filter-summary')?.value || 'all';
+  const expenses = trip === 'all' ? state.expenses : state.expenses.filter(e => e.trip === trip);
+  if (!expenses.length) { showToast('No expenses to remind about', 'error'); return; }
+
+  const { transactions } = computeSettlementsWithPartials(expenses);
+  const outstanding = transactions.filter(t => t.remaining > 0.01);
+  if (!outstanding.length) { showToast('Everyone is already settled up!', 'success'); return; }
+
+  let sent = 0, skipped = 0;
+  for (const t of outstanding) {
+    const email = getMemberEmail(t.from);
+    if (!email) { skipped++; continue; }
+    const subject = `SplitMate — Settlement Reminder`;
+    const allLines = outstanding.filter(x => x.from === t.from)
+      .map(x => `  You owe ${x.to}: ₹${x.remaining.toFixed(2)}`).join('\n');
+    const message =
+`Hi ${t.from},
+
+Here's a summary of your outstanding payments in SplitMate:
+
+${allLines}
+
+View the full settlement page and settle up here:
+${APP_URL}/#settlement
+
+Thanks,
+SplitMate`;
+
+    try {
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: email, to_name: t.from, subject, message,
+        app_url: APP_URL + '/#settlement'
+      });
+      sent++;
+    } catch(e) { skipped++; }
+  }
+
+  if (sent) showToast(`✉️ Reminders sent to ${sent} member${sent>1?'s':''}${skipped?' ('+skipped+' skipped — no email)':''}`, 'success');
+  else showToast(`No emails sent. Add member emails in Settings first.`, 'error');
+}
+
+async function sendSettlementConfirmEmail(settlement) {
+  if (!state.emailNotifications) return; // silently skip — user has disabled notifications
+  // Notify the creditor (to) that they received payment
+  const toEmail = getMemberEmail(settlement.to);
+  if (!toEmail) return;
+  const typeLabel = settlement.full ? 'full settlement' : `partial payment of ₹${settlement.amount.toFixed(2)}`;
+  const subject = `SplitMate — Payment Received from ${settlement.from}`;
+  const message =
+`Hi ${settlement.to},
+
+Great news! ${settlement.from} has recorded a ${typeLabel} to you.
+
+  Amount: ₹${settlement.amount.toFixed(2)}
+  Date: ${settlement.date}
+  ${settlement.note ? 'Note: ' + settlement.note : ''}
+
+You can view the updated settlement page here:
+${APP_URL}/#settlement
+
+Thanks,
+SplitMate`;
+
+  try {
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: toEmail, to_name: settlement.to, subject, message,
+      app_url: APP_URL + '/#settlement'
+    });
+  } catch(e) { /* silently fail — UI already shows the settlement */ }
+
+  // Also notify the debtor (from) with confirmation
+  const fromEmail = getMemberEmail(settlement.from);
+  if (fromEmail) {
+    const msgFrom =
+`Hi ${settlement.from},
+
+Your ${typeLabel} to ${settlement.to} has been recorded in SplitMate.
+
+  Amount: ₹${settlement.amount.toFixed(2)}
+  Date: ${settlement.date}
+  ${settlement.note ? 'Note: ' + settlement.note : ''}
+
+View your updated balance:
+${APP_URL}/#settlement
+
+Thanks,
+SplitMate`;
+    try {
+      await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+        to_email: fromEmail, to_name: settlement.from,
+        subject: `SplitMate — Payment Confirmation`,
+        message: msgFrom, app_url: APP_URL + '/#settlement'
+      });
+    } catch(e) {}
+  }
+}
+
+// ── DASHBOARD ──
+function getFilteredExpenses() {
+  const trip = document.getElementById('trip-filter')?.value || 'all';
+  return trip === 'all' ? state.expenses : state.expenses.filter(e => e.trip === trip);
+}
+
+function renderDashboard() {
+  const expenses = getFilteredExpenses();
+  const total = expenses.reduce((s, e) => s + e.amount, 0);
+
+  // Resolve the current user's member name by matching their email against
+  // the members list — the Google profile name often differs from the sheet name.
+  const myEmail = (state.user?.email || '').toLowerCase();
+  const myName = Object.entries(state.memberEmails)
+    .find(([, email]) => email.toLowerCase() === myEmail)?.[0]
+    || state.user?.name || '';
+
+  const { balances } = computeSettlementsWithPartials(expenses);
+  const myBal = balances[myName] || 0;
+
+  document.getElementById('stat-total').textContent = '₹' + total.toLocaleString('en-IN', {maximumFractionDigits:0});
+  document.getElementById('stat-owe').textContent = myBal < 0 ? '₹' + (-myBal).toFixed(0) : '₹0';
+  document.getElementById('stat-owed').textContent = myBal > 0 ? '₹' + myBal.toFixed(0) : '₹0';
+  document.getElementById('stat-count').textContent = expenses.length;
+  renderCharts(expenses);
+}
+
+let charts = {};
+function renderCharts(expenses) {
+  // Skip if dashboard page canvases aren't in DOM (page not active)
+  const c1 = document.getElementById('chart-category');
+  const c2 = document.getElementById('chart-person');
+  const c3 = document.getElementById('chart-timeline');
+  if (!c1 || !c2 || !c3) return;
+
+  try {
+  const catTotals = {};
+  expenses.forEach(e => { catTotals[e.category] = (catTotals[e.category] || 0) + e.amount; });
+  const catKeys = Object.keys(catTotals);
+
+  if (charts.category) charts.category.destroy();
+  const ctx1 = document.getElementById('chart-category').getContext('2d');
+  charts.category = new Chart(ctx1, {
+    type: 'doughnut',
+    data: {
+      labels: catKeys.map(k => k.split(' ').slice(1).join(' ')),
+      datasets: [{ data: catKeys.map(k => catTotals[k]), backgroundColor: catKeys.map(k => CAT_COLORS[k] || '#a0a0c0'), borderWidth: 0, hoverOffset: 8 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { color: '#7070a0', font: { size: 11 }, boxWidth: 12 } } } }
+  });
+
+  // Person chart
+  const personTotals = {};
+  expenses.forEach(e => { personTotals[e.paidBy] = (personTotals[e.paidBy] || 0) + e.amount; });
+  if (charts.person) charts.person.destroy();
+  const ctx2 = document.getElementById('chart-person').getContext('2d');
+  charts.person = new Chart(ctx2, {
+    type: 'bar',
+    data: {
+      labels: Object.keys(personTotals),
+      datasets: [{ data: Object.values(personTotals), backgroundColor: '#7c6dfa88', borderColor: '#7c6dfa', borderWidth: 2, borderRadius: 6 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#7070a0', font: { size: 11 } }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#7070a0', font: { size: 11 } }, grid: { color: '#2a2a3a' } } } }
+  });
+
+  // Timeline
+  const dayTotals = {};
+  expenses.forEach(e => { dayTotals[e.date] = (dayTotals[e.date] || 0) + e.amount; });
+  const days = Object.keys(dayTotals).sort();
+  if (charts.timeline) charts.timeline.destroy();
+  const ctx3 = document.getElementById('chart-timeline').getContext('2d');
+  charts.timeline = new Chart(ctx3, {
+    type: 'line',
+    data: {
+      labels: days,
+      datasets: [{ data: days.map(d => dayTotals[d]), borderColor: '#6dfabc', backgroundColor: 'rgba(109,250,188,0.08)', tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#6dfabc' }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+      scales: { x: { ticks: { color: '#7070a0', font: { size: 11 } }, grid: { color: '#2a2a3a' } }, y: { ticks: { color: '#7070a0', font: { size: 11 } }, grid: { color: '#2a2a3a' } } } }
+  });
+  } catch(e) { console.warn('Chart render error:', e); }
+}
+
+// ── STAT CARD NAVIGATION ──
+function statCardNav(target) {
+  const currentTrip = document.getElementById('trip-filter')?.value || 'all';
+  if (target === 'history') {
+    const histTrip = document.getElementById('hist-trip');
+    if (histTrip) histTrip.value = currentTrip;
+    // Reset other history filters so the user sees a clean, unfiltered list
+    const histCat = document.getElementById('hist-cat');
+    const histSearch = document.getElementById('hist-search');
+    const histSort = document.getElementById('hist-sort');
+    if (histCat) histCat.value = 'all';
+    if (histSearch) histSearch.value = '';
+    if (histSort) histSort.value = 'date-desc';
+    showPage('history');
+  } else if (target === 'summary') {
+    const summaryTrip = document.getElementById('trip-filter-summary');
+    if (summaryTrip) summaryTrip.value = currentTrip;
+    showPage('summary');
+  }
+}
+
+// Keep all trip filter controls in sync across all pages
+function syncTripFilter(val) {
+  ['trip-filter', 'trip-filter-summary', 'hist-trip'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  });
+  document.querySelectorAll('.trip-pill').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.trip === val);
+  });
+}
+
+function selectTripPill(val) {
+  loadTripData(val);
+}
+
+function loadTripData(val) {
+  val = val || document.getElementById('trip-filter')?.value || 'all';
+  syncTripFilter(val);
+  persistActiveTrip(val);
+  renderDashboard();
+  renderSummary();
+  renderHistory();
+}
+
+// ── TRIP MODAL ──
+function openNewTripModal() { document.getElementById('new-trip-modal').style.display = 'flex'; }
+function closeNewTripModal() { document.getElementById('new-trip-modal').style.display = 'none'; }
+function createTripFromModal() {
+  const name = document.getElementById('modal-trip-name').value.trim();
+  if (!name) return;
+  if (!state.trips.includes(name)) { state.trips.push(name); refreshTripSelects(); renderTripsList(); saveTrips(); }
+  closeNewTripModal();
+  document.getElementById('modal-trip-name').value = '';
+  showToast('Trip "' + name + '" created!', 'success');
+}
+
+// ── TOAST ──
+function showToast(msg, type = 'success') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + type; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+</script>
+</body>
+</html>
